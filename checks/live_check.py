@@ -22,8 +22,13 @@ QUESTION = os.environ.get("QUESTION") or "What does Tesla say about supply chain
 WAKE_SECONDS = 300  # a sleeping Streamlit Cloud app takes a while to start
 ANSWER_SECONDS = 300  # a first question after the app wakes can take minutes
 WAKE_BUTTON = re.compile(r"get this app back up|wake .*up", re.I)
+# What the app shows once it has finished: an answer footer, a refusal, or one of the API's
+# error messages (src/api.py, app/client.py). Kept to whole phrases: single words such as
+# "limit" also occur in answers and would stop the wait before the answer is complete.
 DONE = re.compile(
-    r"Answered in|Not found in the filings|Setup incomplete|not reachable|limit|quota"
+    r"Answered in|Not found in the filings|Setup incomplete|is not reachable"
+    r"|daily limit of questions|Gemini quota is used up|language model is unavailable"
+    r"|Something went wrong|Questions are limited to"
 )
 
 
