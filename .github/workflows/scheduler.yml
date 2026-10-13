@@ -1,0 +1,54 @@
+name: Scheduler
+
+# Runs the live app's recurring jobs on time. GitHub's own schedule starts workflows late
+# or drops them, so a single long-running job does the timing instead (checks/scheduler.py):
+# - opens the app every 30 minutes, around the clock, so Streamlit never puts it to sleep;
+# - starts the Daily traffic workflow whenever questions are due (9am-5pm New York).
+# Each run lasts about 5.5 hours and then starts the next one, so the cycle never stops.
+# The schedule below (every 3 hours) only restarts the cycle if it is ever interrupted.
+# If the app fails to load several times in a row, the run fails and GitHub emails the owner.
+on:
+  schedule:
+    - cron: "13 */3 * * *"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - checks/scheduler.py
+      - checks/keep_awake.py
+      - .github/workflows/scheduler.yml
+
+permissions:
+  contents: read
+  actions: write  # start Daily traffic and the next Scheduler run
+
+concurrency:
+  group: scheduler
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    env:
+      APP_URL: ${{ vars.APP_URL || 'https://filings.streamlit.app' }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Playwright with Chromium
+        run: |
+          pip install "playwright>=1.45"
+          python -m playwright install --with-deps chromium
+      - name: Visit the app once (pull requests)
+        if: github.event_name == 'pull_request'
+        run: python checks/keep_awake.py
+      - name: Keep the app awake and start due questions
+        if: github.event_name != 'pull_request'
+        run: python checks/scheduler.py
+      - name: Start the next run
+        if: (success() || failure()) && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run scheduler.yml --ref main
