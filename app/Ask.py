@@ -13,9 +13,6 @@ EXAMPLES = [
 st.set_page_config(page_title="Filings Q&A", page_icon="📄", layout="centered")
 start_warmup()  # load the search model while the visitor reads the page
 cfg = load_config()
-# The scheduled checks open the app with ?source=check so their questions stay off the
-# Monitoring page (checks/live_check.py).
-automated = st.query_params.get("source") == "check"
 
 st.title("Filings Q&A")
 st.write(
@@ -56,7 +53,7 @@ with st.form("ask"):
 if submitted and question.strip():
     with st.spinner("Searching the filings and writing a cited answer…"):
         try:
-            result = call("POST", "/ask", json={"question": question, "automated": automated})
+            result = call("POST", "/ask", json={"question": question})
         except ApiError as exc:
             st.warning(str(exc))
             st.stop()

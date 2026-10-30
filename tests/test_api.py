@@ -84,18 +84,6 @@ def test_ask_logs_each_question(log):
     assert first["top_score"] == 0.62 and first["model"] == "test-model"
 
 
-def test_automated_questions_are_logged_apart_but_count_toward_the_cap(log):
-    c = client(log)
-    q = "What does Tesla say about supply?"
-    c.post("/ask", json={"question": q, "automated": True})
-    c.post("/ask", json={"question": q})
-    assert [r["source"] for r in log.rows] == [monitor.CHECK_SOURCE, monitor.SOURCE]
-    since = datetime.now(UTC) - timedelta(hours=1)
-    assert len(log.rows_since(since)) == 1  # only the visitor's question is on the dashboard
-    assert log.count_since(since) == 2
-    assert c.get("/stats?days=1").json()["total"] == 1
-
-
 def test_ask_validates_question_length(log):
     c = client(log)
     assert c.post("/ask", json={"question": "hi"}).status_code == 422

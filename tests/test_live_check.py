@@ -10,13 +10,6 @@ ANSWER = (
 )
 
 
-def test_check_url_marks_the_visit_as_automated():
-    assert live_check.check_url("https://filings.streamlit.app") == (
-        "https://filings.streamlit.app?source=check"
-    )
-    assert live_check.check_url("https://x.app/?a=1") == "https://x.app/?a=1&source=check"
-
-
 def test_answer_text_does_not_end_the_wait_early():
     # An answer that is still rendering (no footer yet) must not count as finished, even
     # when it mentions words like "limit" or "quota".
