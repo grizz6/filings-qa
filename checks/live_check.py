@@ -18,6 +18,8 @@ import time
 from playwright.sync_api import sync_playwright
 
 APP_URL = os.environ.get("APP_URL") or "https://filings.streamlit.app"
+# Marks the questions as automated so they stay off the Monitoring page (app/Ask.py).
+CHECK_PARAM = "source=check"
 QUESTION = os.environ.get("QUESTION") or "What does Tesla say about supply chain risk?"
 WAKE_SECONDS = 300  # a sleeping Streamlit Cloud app takes a while to start
 ANSWER_SECONDS = 300  # a first question after the app wakes can take minutes
@@ -60,9 +62,13 @@ def app_frame(page, deadline: float):
     )
 
 
+def check_url(url: str) -> str:
+    return f"{url}{'&' if '?' in url else '?'}{CHECK_PARAM}"
+
+
 def ask(page, question: str) -> tuple[str, str]:
     """Ask one question in a fresh session; return (outcome, text the app shows)."""
-    page.goto(APP_URL, wait_until="domcontentloaded", timeout=120_000)
+    page.goto(check_url(APP_URL), wait_until="domcontentloaded", timeout=120_000)
     frame = app_frame(page, time.time() + WAKE_SECONDS)
     frame.get_by_label("Your question").fill(question)
     frame.get_by_role("button", name="Ask", exact=True).click()

@@ -23,6 +23,9 @@ from datetime import UTC, datetime, timedelta
 from src.config import load_config
 
 SOURCE = os.environ.get("LOG_SOURCE", "app")  # CI smoke tests log as "ci", not counted
+# Questions the scheduled checks ask the live app (checks/live_check.py). They are kept out
+# of the dashboard but still count toward the daily cap: they use the same Gemini quota.
+CHECK_SOURCE = "check"
 
 SCHEMA_SQL = """CREATE TABLE IF NOT EXISTS qa_log (
     id          bigserial   PRIMARY KEY,
@@ -49,17 +52,21 @@ RECENT_ROWS = 20
 class MemoryLog:
     """In-memory stand-in for PgLog (tests, local runs without a database)."""
 
-    def __init__(self):
+    def __init__(self, source: str = SOURCE):
+        self.source = source
         self.rows: list[dict] = []
 
     def add(self, record: dict) -> None:
-        self.rows.append({"ts": record.get("ts") or datetime.now(UTC), **record})
+        self.rows.append(
+            {"ts": record.get("ts") or datetime.now(UTC), "source": self.source, **record}
+        )
 
     def count_since(self, since: datetime) -> int:
-        return len(self.rows_since(since))
+        counted = (self.source, CHECK_SOURCE)
+        return sum(r["ts"] >= since and r["source"] in counted for r in self.rows)
 
     def rows_since(self, since: datetime) -> list[dict]:
-        return [r for r in self.rows if r["ts"] >= since]
+        return [r for r in self.rows if r["ts"] >= since and r["source"] == self.source]
 
 
 class PgLog:
@@ -89,14 +96,15 @@ class PgLog:
         with self._connect() as conn:
             conn.execute(
                 f"INSERT INTO qa_log (source, {cols}) VALUES ({marks})",
-                (self.source, *(record[c] for c in COLUMNS)),
+                (record.get("source") or self.source, *(record[c] for c in COLUMNS)),
             )
 
     def count_since(self, since: datetime) -> int:
+        """Questions toward the daily cap: this source's plus the scheduled checks'."""
         with self._connect() as conn:
             return conn.execute(
-                "SELECT count(*) AS n FROM qa_log WHERE source = %s AND ts >= %s",
-                (self.source, since),
+                "SELECT count(*) AS n FROM qa_log WHERE source = ANY(%s) AND ts >= %s",
+                ([self.source, CHECK_SOURCE], since),
             ).fetchone()["n"]
 
     def rows_since(self, since: datetime) -> list[dict]:

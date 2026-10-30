@@ -116,7 +116,19 @@ def test_ask_shows_cited_answer_and_sources(api):
     assert any("2.3 s" in c.value for c in at.caption)
     method, path, kwargs = api["_seen"][-1]
     assert (method, path) == ("POST", "/ask")
-    assert kwargs["json"] == {"question": "What does Tesla say about supply chain risk?"}
+    assert kwargs["json"] == {
+        "question": "What does Tesla say about supply chain risk?",
+        "automated": False,
+    }
+
+
+def test_scheduled_checks_mark_their_questions_as_automated(api):
+    api["/ask"] = (200, ANSWER)
+    at = AppTest.from_file(str(ROOT / "app" / "Ask.py"), default_timeout=30)
+    at.query_params["source"] = "check"
+    at.run()
+    ask(at, "What does Tesla say about supply chain risk?")
+    assert api["_seen"][-1][2]["json"]["automated"] is True
 
 
 def test_ask_shows_refusal_as_info(api):

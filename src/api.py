@@ -29,6 +29,7 @@ STATS_MAX_DAYS = 90
 
 class AskRequest(BaseModel):
     question: str = Field(min_length=3)
+    automated: bool = False  # asked by a scheduled check, not a visitor: kept off the dashboard
 
 
 def _snippet(text: str) -> str:
@@ -58,11 +59,12 @@ def create_app(answer_fn=None, log=None, cfg: dict | None = None) -> FastAPI:
     log = log if log is not None else _default_log()
     app = FastAPI(title="Filings Q&A", description=__doc__.split("\n")[0])
 
-    def record(question, status, latency_ms, result=None, error=None):
+    def record(question, status, latency_ms, result=None, error=None, automated=False):
         chunks = (result or {}).get("chunks", [])
         try:
             log.add(
                 {
+                    **({"source": monitor.CHECK_SOURCE} if automated else {}),
                     "question": question,
                     "tickers": list(dict.fromkeys(c["ticker"] for c in chunks)),
                     "status": status,
@@ -109,7 +111,7 @@ def create_app(answer_fn=None, log=None, cfg: dict | None = None) -> FastAPI:
         try:
             result = answer_fn(question)
         except LLMError as exc:
-            record(question, "error", elapsed(), error=str(exc)[:300])
+            record(question, "error", elapsed(), error=str(exc)[:300], automated=req.automated)
             if "quota" in str(exc).lower():
                 raise HTTPException(
                     503, "The free Gemini quota is used up for today. Try again tomorrow."
@@ -118,13 +120,20 @@ def create_app(answer_fn=None, log=None, cfg: dict | None = None) -> FastAPI:
                 503, "The language model is unavailable right now. Try again in a minute."
             ) from None
         except Exception as exc:
-            record(question, "error", elapsed(), error=f"{type(exc).__name__}: {str(exc)[:300]}")
+            record(
+                question,
+                "error",
+                elapsed(),
+                error=f"{type(exc).__name__}: {str(exc)[:300]}",
+                automated=req.automated,
+            )
             raise HTTPException(
                 500, "Something went wrong while answering. Please try again."
             ) from None
 
         latency_ms = elapsed()
-        record(question, "refused" if result["refused"] else "answered", latency_ms, result)
+        status = "refused" if result["refused"] else "answered"
+        record(question, status, latency_ms, result, automated=req.automated)
         tickers = {c["id"]: c["ticker"] for c in result["chunks"]}
         return {
             "question": question,

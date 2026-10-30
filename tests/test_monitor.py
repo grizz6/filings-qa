@@ -128,11 +128,20 @@ def test_pglog_insert_matches_columns_and_creates_schema_once(monkeypatch):
     assert sql.startswith("INSERT INTO qa_log (source, " + ", ".join(monitor.COLUMNS) + ")")
 
 
+def test_pglog_logs_a_record_under_its_own_source_when_given(monkeypatch):
+    calls = fake_psycopg(monkeypatch)
+    record = {c: f"v_{c}" for c in monitor.COLUMNS}
+    monitor.PgLog("postgresql://x", source="app").add({**record, "source": "check"})
+    params = next(p for sql, p in calls if sql.startswith("INSERT"))
+    assert params[0] == "check"
+
+
 def test_pglog_reads_only_its_own_source(monkeypatch):
     since = NOW - timedelta(days=1)
     calls = fake_psycopg(monkeypatch, result={"n": 7})
     assert monitor.PgLog("postgresql://x", source="app").count_since(since) == 7
-    assert calls[-1][1] == ("app", since)
+    assert "WHERE source = ANY(%s) AND ts >= %s" in calls[-1][0]
+    assert calls[-1][1] == (["app", monitor.CHECK_SOURCE], since)  # checks count toward the cap
     calls = fake_psycopg(monkeypatch, result=[row(1)])
     assert monitor.PgLog("postgresql://x", source="ci").rows_since(since) == [row(1)]
     assert "WHERE source = %s AND ts >= %s" in calls[-1][0] and calls[-1][1] == ("ci", since)
