@@ -1,6 +1,6 @@
 name: Test set audit
 
-# Day 6 check: for each of the 50 questions, Gemini reads the company's ENTIRE Risk Factors
+# For each of the 50 questions, Gemini reads the company's ENTIRE Risk Factors
 # section and says whether it answers the question, with an exact sentence that is checked
 # against the section. Fails if an "unanswerable" question is answered there, or an
 # answerable one is not supported. ~50 Gemini calls (free tier), ~6 minutes.

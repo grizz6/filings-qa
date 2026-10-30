@@ -1,4 +1,4 @@
-# Day 7 experiments: change ONE thing at a time.
+# Retrieval experiments: change ONE thing at a time.
 # A vs B: chunk size (all-MiniLM-L6-v2 reads only ~256 word pieces, about 190 words, per chunk).
 # B vs C: how many chunks are retrieved.
 experiments:

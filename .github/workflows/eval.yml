@@ -1,6 +1,6 @@
 name: Experiments
 
-# Day 7: run every experiment in eval/experiments.yaml on the 50-question test set and log
+# Run every experiment in eval/experiments.yaml on the 50-question test set and log
 # params + metrics to MLflow. The MLflow database is uploaded as the "mlflow" artifact:
 #   download it, then:  pip install mlflow && mlflow ui --backend-store-uri sqlite:///mlflow.db
 # The results table also appears on the run's summary page.

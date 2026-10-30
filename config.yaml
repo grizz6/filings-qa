@@ -1,6 +1,6 @@
 # All tunable settings live here so experiments change config, not code.
 
-companies:  # ticker -> name (Day 2 downloads the latest 10-K for each)
+companies:  # ticker -> name (the latest 10-K is downloaded for each)
   AAPL: Apple
   MSFT: Microsoft
   TSLA: Tesla
@@ -30,7 +30,7 @@ chunking:
   overlap_words: 50
 
 retrieval:
-  top_k: 8  # Day 7: k=8 found the quote for 36/40 test questions vs 33/40 at k=5
+  top_k: 8  # k=8 found the quote for 36/40 test questions vs 33/40 at k=5
   embedding_model: sentence-transformers/all-MiniLM-L6-v2
 
 llm:
@@ -40,7 +40,7 @@ llm:
   temperature: 0.0
   max_tokens: 2048  # leave room: some Gemini models spend output tokens on thinking
 
-app:  # Day 9-10 web app
+app:  # web app
   max_questions_per_day: 300  # protects the free Gemini quota (~1,000/day, shared with CI)
   max_question_chars: 500
-  low_confidence_score: 0.40  # top retrieval score below this = "low confidence" (Day 10)
+  low_confidence_score: 0.40  # top retrieval score below this = "low confidence"

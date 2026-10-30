@@ -1,6 +1,6 @@
 name: Weekly monitor
 
-# Day 10: scheduled checks that need no person and no LLM quota.
+# Scheduled checks that need no person and no LLM quota.
 # - data: re-download the latest 10-Ks and re-run the test-set verify + retrieval gate.
 #   Fails when a company files a new 10-K that changes the text (refresh the test set and
 #   re-index) or when retrieval quality drifts below eval/thresholds.yaml.

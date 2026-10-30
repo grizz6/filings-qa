@@ -1,4 +1,4 @@
-"""HTTP API for the Q&A system (Day 9).
+"""HTTP API for the Q&A system.
 
   GET  /health   settings and whether the secrets are configured (never their values)
   POST /ask      {"question": "..."} -> answer, citations, retrieved sources, latency

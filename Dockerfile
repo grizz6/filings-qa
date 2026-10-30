@@ -1,4 +1,4 @@
-# Filings Q&A web app (Day 9): FastAPI on :8000 + Streamlit UI on :7860, for any container
+# Filings Q&A web app: FastAPI on :8000 + Streamlit UI on :7860, for any container
 # host. (The hosted demo runs on Streamlit Community Cloud instead; see README "Deploy".)
 FROM python:3.11-slim
 

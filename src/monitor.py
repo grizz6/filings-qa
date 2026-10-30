@@ -1,4 +1,4 @@
-"""Question log and monitoring (Day 10).
+"""Question log and monitoring.
 
 Every question the app answers is logged to Supabase (table qa_log): status (answered,
 refused, error), latency, number of citations and the top retrieval score. `summarize`

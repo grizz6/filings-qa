@@ -1,4 +1,4 @@
-"""Build and check the evaluation test set (Day 6).
+"""Build and check the evaluation test set.
 
 Step 1, in the cloud: draft candidate questions from real chunks.
     python -m src.testset candidates   # data/chunks.jsonl -> data/eval/candidates.jsonl

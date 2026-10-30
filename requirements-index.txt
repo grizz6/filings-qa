@@ -1,4 +1,4 @@
-# Embedding + vector store (Day 4). Kept separate because PyTorch is large:
+# Embedding + vector store. Kept separate because PyTorch is large:
 # only the pipeline installs it, the fast CI lint/test job does not.
 # CPU-only PyTorch wheels (much smaller than the default CUDA build).
 --extra-index-url https://download.pytorch.org/whl/cpu

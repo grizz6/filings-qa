@@ -73,7 +73,7 @@ jobs:
         run: python -m src.llm "Say hi in one short sentence."
 
   eval-gate:
-    # Day 8: block changes that make retrieval worse. Rebuilds the sections, embeds chunks
+    # Block changes that make retrieval worse. Rebuilds the sections, embeds chunks
     # with the settings in config.yaml, scores the 40 answerable test questions, and fails
     # if hit rate or MRR is below eval/thresholds.yaml. Retrieval only: no LLM calls.
     runs-on: ubuntu-latest

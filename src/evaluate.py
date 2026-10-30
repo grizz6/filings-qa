@@ -1,4 +1,4 @@
-"""Measure quality on the test set (Day 7) and gate CI on it (Day 8).
+"""Measure quality on the test set and gate CI on it.
 
 Metrics, on eval/test_set.jsonl:
 - hit_rate_at_k: share of the 40 answerable questions where a top-k chunk contains the gold

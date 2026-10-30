@@ -1,6 +1,6 @@
 name: App
 
-# Day 9: check both ways the app runs, each with one real question (1 Gemini call each):
+# Check both ways the app runs, each with one real question (1 Gemini call each):
 # - image: build the Docker image (API + UI processes), run it, ask over HTTP.
 # - streamlit-cloud: what Streamlit Community Cloud does: install app/requirements.txt on
 #   Python 3.11, start `streamlit run app/Ask.py` with no API_URL (API in-process), check
