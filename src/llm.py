@@ -31,7 +31,7 @@ class LLMError(RuntimeError):
 def _api_key() -> str:
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
-        raise LLMError("GEMINI_API_KEY is not set. See .env.example.")
+        raise LLMError("GEMINI_API_KEY is not set.")
     return key
 
 

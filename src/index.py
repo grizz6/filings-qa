@@ -119,7 +119,7 @@ def embed(model, texts: list[str]):
 def db_url() -> str:
     url = os.environ.get("SUPABASE_DB_URL", "").strip()
     if not url:
-        raise IndexBuildError("SUPABASE_DB_URL is not set. See .env.example.")
+        raise IndexBuildError("SUPABASE_DB_URL is not set.")
     if "sslmode=" not in url:
         url += ("&" if "?" in url else "?") + "sslmode=require"
     return url

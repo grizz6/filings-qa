@@ -1,7 +1,6 @@
 # Secrets: never commit these
 .env
 .env.*
-!.env.example
 
 # Data, indexes, experiment runs, logs
 data/
