@@ -47,8 +47,22 @@ jobs:
       - name: Keep the app awake and start due questions
         if: github.event_name != 'pull_request'
         run: python checks/scheduler.py
+      - name: Screenshot of a failed visit
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scheduler
+          path: app-not-loaded.png
+          if-no-files-found: ignore
+      # GitHub's API occasionally answers 500; without a retry the cycle stops until the
+      # schedule above restarts it.
       - name: Start the next run
         if: (success() || failure()) && github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run scheduler.yml --ref main
+        run: |
+          for wait in 5 15 45 0; do
+            gh workflow run scheduler.yml --ref main && exit 0
+            [ "$wait" -gt 0 ] && echo "Retrying in $wait s" && sleep "$wait"
+          done
+          exit 1

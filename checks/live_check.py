@@ -20,6 +20,10 @@ from playwright.sync_api import sync_playwright
 APP_URL = os.environ.get("APP_URL") or "https://filings.streamlit.app"
 QUESTION = os.environ.get("QUESTION") or "What does Tesla say about supply chain risk?"
 WAKE_SECONDS = 300  # a sleeping Streamlit Cloud app takes a while to start
+# A page load sometimes stalls on a blank page that never recovers, while a fresh load works
+# within seconds. Reload when the app has not appeared for this long (or since a wake click).
+RELOAD_SECONDS = 60
+FAILURE_SCREENSHOT = "app-not-loaded.png"
 ANSWER_SECONDS = 300  # a first question after the app wakes can take minutes
 WAKE_BUTTON = re.compile(r"get this app back up|wake .*up", re.I)
 # What the app shows once it has finished: an answer footer, a refusal, or one of the API's
@@ -37,9 +41,12 @@ def app_frame(page, deadline: float):
 
     Counts as loaded only once the question box is on screen: the sleep page and the
     Streamlit Cloud shell can show the app's name before the app itself is running. The
-    wake-up button is searched for in every frame and clicked whenever it appears.
+    wake-up button is searched for in every frame and clicked whenever it appears. A page
+    that shows neither for RELOAD_SECONDS is reloaded. On failure the error lists what every
+    frame showed and a screenshot is saved for the workflow to upload.
     """
     woke = False
+    waiting_since = time.time()
     while time.time() < deadline:
         for frame in page.frames:
             try:
@@ -49,15 +56,38 @@ def app_frame(page, deadline: float):
                         print("App was asleep; waking it up", flush=True)
                     woke = True
                     wake.first.click()
+                    waiting_since = time.time()
                     break
                 if frame.get_by_label("Your question").count():
                     return frame
             except Exception:  # frame navigated away while we looked
                 continue
+        if time.time() - waiting_since >= RELOAD_SECONDS:
+            print(f"App not shown after {RELOAD_SECONDS} s; reloading the page", flush=True)
+            try:
+                page.reload(wait_until="domcontentloaded", timeout=120_000)
+            except Exception as exc:  # a failed reload is retried after the next interval
+                print(f"Reload failed: {exc}", flush=True)
+            waiting_since = time.time()
+            continue
         page.wait_for_timeout(3000)
-    raise SystemExit(
-        f"The app did not load within {WAKE_SECONDS} s:\n{page.inner_text('body')[:2000]}"
-    )
+    try:
+        page.screenshot(path=FAILURE_SCREENSHOT, full_page=True)
+    except Exception:
+        pass
+    raise SystemExit(f"The app did not load within {WAKE_SECONDS} s.\n{describe_frames(page)}")
+
+
+def describe_frames(page) -> str:
+    """URL and visible text of every frame: the app itself is inside an iframe."""
+    parts = []
+    for frame in page.frames:
+        try:
+            text = " ".join(frame.locator("body").inner_text(timeout=5000).split())
+        except Exception as exc:
+            text = f"(unreadable: {type(exc).__name__})"
+        parts.append(f"- {frame.url}: {text[:500] or '(blank)'}")
+    return "\n".join(parts) or "- (no frames)"
 
 
 def ask(page, question: str) -> tuple[str, str]:
