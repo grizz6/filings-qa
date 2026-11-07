@@ -4,8 +4,18 @@ name: Experiments
 # params + metrics to MLflow. The MLflow database is uploaded as the "mlflow" artifact:
 #   download it, then:  pip install mlflow && mlflow ui --backend-store-uri sqlite:///mlflow.db
 # The results table also appears on the run's summary page.
+# Run by hand to pick experiments and to score answers too (40 more Gemini calls each).
 on:
   workflow_dispatch:
+    inputs:
+      experiments:
+        description: Experiment names separated by spaces (empty = all)
+        required: false
+        default: ""
+      answers:
+        description: Also answer and score the 40 answerable questions
+        type: boolean
+        default: false
   pull_request:
     paths:
       - src/evaluate.py
@@ -41,7 +51,14 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: python -m src.evaluate --all
+          EXPERIMENTS: ${{ inputs.experiments }}
+          ANSWERS: ${{ inputs.answers && '--answers' || '' }}
+        run: |
+          if [ -n "$EXPERIMENTS" ]; then
+            python -m src.evaluate --experiment $EXPERIMENTS $ANSWERS
+          else
+            python -m src.evaluate --all $ANSWERS
+          fi
       - uses: actions/upload-artifact@v6
         if: always()
         with:

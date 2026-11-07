@@ -105,3 +105,48 @@ def test_experiment_config_overrides_only_retrieval_settings_it_names():
     assert out["retrieval"] == {"top_k": 8, "embedding_model": "base", "rerank_model": "ce"}
     assert cfg["retrieval"]["rerank_model"] is None  # the shared config is not changed
     assert evaluate.experiment_config({"size_words": 400}, cfg) == cfg
+
+
+def test_answer_scoring_checks_that_a_cited_passage_holds_the_quote():
+    idx = evaluate.MemoryIndex(CHUNKS, VECS, embed_fn)
+    items = [
+        {"id": "q01", "question": "What does Tesla say about battery supply?",
+         "quote": "Battery cell supply could be disrupted", "answerable": True},
+        {"id": "q02", "question": "What does Tesla say about interest rates?",
+         "quote": "Rising interest rates may reduce consumer", "answerable": True},
+        {"id": "q03", "question": "Who is Tesla's CEO?", "answerable": False},
+    ]  # fmt: skip
+
+    def answer_fn(q):
+        if "CEO" in q:
+            return {"refused": True, "answer": "Not found in the filings.", "citations": [],
+                    "chunks": []}  # fmt: skip
+        chunks = evaluate.retrieve(q, k=2, cfg=CFG, search_fn=idx.search)
+        cited = chunks[1] if "battery" in q else chunks[0]  # battery answer cites the wrong one
+        return {"refused": False, "answer": "a [1]", "chunks": chunks,
+                "citations": [{"n": 1, "id": cited["id"]}]}  # fmt: skip
+
+    metrics, rows = evaluate.evaluate(
+        items, CFG, idx.search, k=2, answer_fn=answer_fn, score_answers=True
+    )
+    assert metrics["answer_rate"] == 1.0
+    assert metrics["citation_rate"] == 1.0
+    assert metrics["cited_quote_rate"] == 0.5
+    assert metrics["refusal_rate"] == 1.0
+    assert [r["cited_quote"] for r in rows[:2]] == [False, True]
+
+
+def test_answers_are_not_scored_unless_asked():
+    idx = evaluate.MemoryIndex(CHUNKS, VECS, embed_fn)
+    items = [{"id": "q01", "question": "Tesla battery?", "quote": "Battery", "answerable": True}]
+    metrics, rows = evaluate.evaluate(items, CFG, idx.search, k=1, answer_fn=lambda q: 1 / 0)
+    assert "cited_quote_rate" not in metrics and "refused" not in rows[0]
+
+
+def test_markdown_table_adds_answer_columns_only_when_measured():
+    plain = evaluate.markdown_table({"A": {"hit_rate_at_k": 0.9}})
+    assert "cited_quote_rate" not in plain
+    scored = evaluate.markdown_table({"A": {"hit_rate_at_k": 0.9, "cited_quote_rate": 0.8}})
+    header = scored.splitlines()[0]
+    cols = [c.strip() for c in header.strip("|").split("|")]
+    assert cols.index("refusal_rate") < cols.index("cited_quote_rate") < cols.index("n_chunks")

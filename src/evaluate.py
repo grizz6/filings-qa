@@ -8,6 +8,12 @@ Metrics, on eval/test_set.jsonl:
 - refusal_rate: share of the 10 unanswerable questions answered "Not found in the filings."
   (needs the LLM; skipped with --no-llm).
 
+With --answers, the 40 answerable questions are also answered by the LLM and scored:
+- answer_rate: share answered instead of refused.
+- citation_rate: share whose answer cites at least one retrieved passage.
+- cited_quote_rate: share where a passage the answer cites contains the gold quote: the answer
+  rests on the passage that holds the fact. The closest automatic check of a correct answer.
+
 Retrieval runs in memory with the same embedding model and company filter as the app, over
 chunks rebuilt from data/sections/ with each experiment's chunk size. That makes chunk-size
 experiments cheap and keeps them away from the live Supabase index.
@@ -17,7 +23,8 @@ leaves out comes from config.yaml.
 
 Run:
   python -m src.evaluate --all            # every experiment in eval/experiments.yaml -> MLflow
-  python -m src.evaluate --experiment B   # one experiment
+  python -m src.evaluate --experiment B C # some experiments
+  python -m src.evaluate --all --answers  # also answer and score the 40 answerable questions
   python -m src.evaluate --gate           # config.yaml settings vs eval/thresholds.yaml, no LLM
 """
 
@@ -43,6 +50,7 @@ RESULTS_DIR = ROOT / "data" / "eval"
 SECTIONS_DIR = ROOT / "data" / "sections"
 MANIFEST_PATH = ROOT / "data" / "raw" / "manifest.json"
 GATED_METRICS = ("hit_rate_at_k", "mrr")
+ANSWER_METRICS = ("answer_rate", "citation_rate", "cited_quote_rate")
 
 
 def build_chunks(size: int, overlap: int, sections_dir=SECTIONS_DIR, manifest=MANIFEST_PATH):
@@ -97,19 +105,49 @@ def retrieval_metrics(ranks: list[int | None], k: int) -> dict[str, float]:
     }
 
 
+def cites_quote(result: dict, quote: str) -> bool:
+    """True when a passage the answer cites contains the quote."""
+    texts = {c["id"]: c["text"] for c in result["chunks"]}
+    return any(contains_quote(texts.get(c["id"], ""), quote) for c in result["citations"])
+
+
+def answer_metrics(scored: list[dict]) -> dict[str, float]:
+    n = len(scored)
+    return {
+        "answer_rate": sum(not r["refused"] for r in scored) / n,
+        "citation_rate": sum(r["n_citations"] > 0 for r in scored) / n,
+        "cited_quote_rate": sum(r["cited_quote"] for r in scored) / n,
+    }
+
+
 def evaluate(
-    items: list[dict], cfg: dict, search_fn, k: int, answer_fn=None
+    items: list[dict], cfg: dict, search_fn, k: int, answer_fn=None, score_answers=False
 ) -> tuple[dict, list[dict]]:
-    """Score retrieval on answerable items and, with answer_fn, refusals on the others."""
-    rows, ranks = [], []
+    """Score retrieval on answerable items and, with answer_fn, refusals on the others.
+
+    With score_answers (needs answer_fn), the answerable items are answered and scored too.
+    """
+    rows, ranks, scored = [], [], []
     for it in items:
         if not it["answerable"]:
             continue
         retrieved = retrieve(it["question"], k=k, cfg=cfg, search_fn=search_fn)
         rank = first_hit_rank(retrieved, it["quote"])
         ranks.append(rank)
-        rows.append({"id": it["id"], "rank": rank, "retrieved": [c["id"] for c in retrieved]})
+        row = {"id": it["id"], "rank": rank, "retrieved": [c["id"] for c in retrieved]}
+        if score_answers and answer_fn is not None:
+            result = answer_fn(it["question"])
+            row.update(
+                refused=result["refused"],
+                n_citations=len(result["citations"]),
+                cited_quote=cites_quote(result, it["quote"]),
+                answer=result["answer"],
+            )
+            scored.append(row)
+        rows.append(row)
     metrics = retrieval_metrics(ranks, k)
+    if scored:
+        metrics.update(answer_metrics(scored))
     if answer_fn is not None:
         refused = []
         for it in items:
@@ -118,7 +156,8 @@ def evaluate(
             result = answer_fn(it["question"])
             refused.append(result["refused"])
             rows.append({"id": it["id"], "refused": result["refused"], "answer": result["answer"]})
-        metrics["refusal_rate"] = sum(refused) / len(refused)
+        if refused:
+            metrics["refusal_rate"] = sum(refused) / len(refused)
     return metrics, rows
 
 
@@ -131,7 +170,9 @@ def experiment_config(params: dict, cfg: dict) -> dict:
     return {**cfg, "retrieval": retrieval}
 
 
-def run_experiment(name: str, params: dict, cfg: dict, use_llm: bool) -> tuple[dict, list[dict]]:
+def run_experiment(
+    name: str, params: dict, cfg: dict, use_llm: bool, score_answers: bool = False
+) -> tuple[dict, list[dict]]:
     from src.index import embed, load_embedder
 
     cfg = experiment_config(params, cfg)
@@ -152,7 +193,9 @@ def run_experiment(name: str, params: dict, cfg: dict, use_llm: bool) -> tuple[d
                 retrieve_fn=lambda q2, cfg: retrieve(q2, k=k, cfg=cfg, search_fn=index.search),
             )
 
-    metrics, rows = evaluate(load_jsonl(TEST_SET_PATH), cfg, index.search, k, answer_fn)
+    metrics, rows = evaluate(
+        load_jsonl(TEST_SET_PATH), cfg, index.search, k, answer_fn, score_answers=score_answers
+    )
     metrics["n_chunks"] = len(chunks)
     return metrics, rows
 
@@ -177,7 +220,9 @@ def log_to_mlflow(name: str, params: dict, cfg: dict, metrics: dict, rows_path: 
 
 
 def markdown_table(results: dict[str, dict]) -> str:
-    cols = ["hit_rate_at_k", "hit_rate_at_5", "mrr", "refusal_rate", "n_chunks"]
+    cols = ["hit_rate_at_k", "hit_rate_at_5", "mrr", "refusal_rate"]
+    cols += [c for c in ANSWER_METRICS if any(c in m for m in results.values())]
+    cols.append("n_chunks")
     lines = ["| run | " + " | ".join(cols) + " |", "|---" * (len(cols) + 1) + "|"]
     for name, m in results.items():
         cells = [
@@ -206,10 +251,13 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     g = p.add_mutually_exclusive_group(required=True)
     g.add_argument("--all", action="store_true")
-    g.add_argument("--experiment")
+    g.add_argument("--experiment", nargs="+", metavar="NAME")
     g.add_argument("--gate", action="store_true")
     p.add_argument("--no-llm", action="store_true", help="skip the refusal metric")
     p.add_argument("--no-mlflow", action="store_true")
+    p.add_argument(
+        "--answers", action="store_true", help="also answer and score the answerable questions"
+    )
     args = p.parse_args()
     cfg = load_config()
 
@@ -233,12 +281,18 @@ def main() -> None:
         return
 
     experiments = yaml.safe_load(EXPERIMENTS_PATH.read_text())["experiments"]
-    names = list(experiments) if args.all else [args.experiment]
+    names = list(experiments) if args.all else args.experiment
+    if unknown := [n for n in names if n not in experiments]:
+        sys.exit(f"Unknown experiment(s): {unknown}. Known: {list(experiments)}")
+    if args.answers and args.no_llm:
+        sys.exit("--answers needs the LLM; drop --no-llm")
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     results = {}
     for name in names:
         params = experiments[name]
-        metrics, rows = run_experiment(name, params, cfg, use_llm=not args.no_llm)
+        metrics, rows = run_experiment(
+            name, params, cfg, use_llm=not args.no_llm, score_answers=args.answers
+        )
         rows_path = RESULTS_DIR / f"{name}.json"
         rows_path.write_text(
             json.dumps({"params": params, "metrics": metrics, "rows": rows}, indent=2)
