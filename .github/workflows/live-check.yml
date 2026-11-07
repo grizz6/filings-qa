@@ -29,8 +29,8 @@ jobs:
       QUESTION: ${{ inputs.question }}
       QUESTIONS: ${{ inputs.questions }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
       - name: Install Playwright with Chromium
@@ -41,7 +41,7 @@ jobs:
         run: python checks/live_check.py
       - name: Screenshot
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: live-check
           path: |

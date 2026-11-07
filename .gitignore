@@ -21,3 +21,8 @@ __pycache__/
 .coverage
 coverage.xml
 htmlcov/
+
+# Screenshots from the live app checks
+live-check.png
+keep-awake.png
+app-not-loaded.png
