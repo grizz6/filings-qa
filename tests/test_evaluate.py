@@ -89,9 +89,19 @@ def test_experiments_and_thresholds_files_are_valid():
     import yaml
 
     exps = yaml.safe_load(evaluate.EXPERIMENTS_PATH.read_text())["experiments"]
-    assert len(exps) == 3
+    assert len(exps) == 6
+    required = {"size_words", "overlap_words", "top_k"}
     for params in exps.values():
-        assert set(params) == {"size_words", "overlap_words", "top_k"}
+        assert required <= set(params) <= required | set(evaluate.RETRIEVAL_OVERRIDES)
     thresholds = yaml.safe_load(evaluate.THRESHOLDS_PATH.read_text())
     assert set(thresholds) == set(evaluate.GATED_METRICS)
     assert all(0 <= v <= 1 for v in thresholds.values())
+
+
+def test_experiment_config_overrides_only_retrieval_settings_it_names():
+    cfg = {"retrieval": {"top_k": 8, "embedding_model": "base", "rerank_model": None},
+           "llm": {"model": "m"}}  # fmt: skip
+    out = evaluate.experiment_config({"size_words": 400, "rerank_model": "ce"}, cfg)
+    assert out["retrieval"] == {"top_k": 8, "embedding_model": "base", "rerank_model": "ce"}
+    assert cfg["retrieval"]["rerank_model"] is None  # the shared config is not changed
+    assert evaluate.experiment_config({"size_words": 400}, cfg) == cfg

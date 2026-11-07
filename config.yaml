@@ -32,6 +32,10 @@ chunking:
 retrieval:
   top_k: 8  # k=8 found the quote for 36/40 test questions vs 33/40 at k=5
   embedding_model: sentence-transformers/all-MiniLM-L6-v2
+  # Cross-encoder that re-orders the vector search results (src/rerank.py); empty = off.
+  # It re-scores `rerank_candidates` chunks and keeps the best top_k.
+  rerank_model:
+  rerank_candidates: 20
 
 llm:
   provider: gemini

@@ -63,3 +63,36 @@ def test_retrieve_without_company_searches_everything():
 
     retrieve.retrieve("cybersecurity breaches", cfg=CFG, search_fn=fake_search)
     assert seen["tickers"] is None
+
+
+def test_reranking_widens_the_search_and_keeps_the_best_k():
+    cfg = {**CFG, "retrieval": {**CFG["retrieval"], "top_k": 2, "rerank_model": "ce",
+                                "rerank_candidates": 4}}  # fmt: skip
+    seen = {}
+
+    def fake_search(question, index_name, tickers, k):
+        seen["k"] = k
+        return [(f"TSLA_1A_000{i}", "TSLA", f"text {i}", "https://sec/x", 0.9 - i / 10)
+                for i in range(k)]  # fmt: skip
+
+    def fake_scores(question, texts):  # the cross-encoder prefers the last candidates
+        return [float(t.split()[-1]) for t in texts]
+
+    chunks = retrieve.retrieve("Tesla?", cfg=cfg, search_fn=fake_search, rerank_fn=fake_scores)
+    assert seen["k"] == 4
+    assert [c["id"] for c in chunks] == ["TSLA_1A_0003", "TSLA_1A_0002"]
+    assert chunks[0]["score"] == pytest.approx(0.6)  # vector similarity is kept
+    assert chunks[0]["rerank_score"] == 3.0
+
+
+def test_no_reranking_when_no_model_is_configured():
+    cfg = {**CFG, "retrieval": {**CFG["retrieval"], "rerank_model": None}}
+
+    def fake_rerank(question, texts):
+        raise AssertionError("must not be called")
+
+    def fake_search(question, index_name, tickers, k):
+        return [("TSLA_1A_0001", "TSLA", "t", "u", 0.5)] * k
+
+    chunks = retrieve.retrieve("Tesla?", cfg=cfg, search_fn=fake_search, rerank_fn=fake_rerank)
+    assert len(chunks) == cfg["retrieval"]["top_k"]

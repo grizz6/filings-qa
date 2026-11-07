@@ -12,6 +12,9 @@ Retrieval runs in memory with the same embedding model and company filter as the
 chunks rebuilt from data/sections/ with each experiment's chunk size. That makes chunk-size
 experiments cheap and keeps them away from the live Supabase index.
 
+An experiment may also set embedding_model, rerank_model and rerank_candidates; anything it
+leaves out comes from config.yaml.
+
 Run:
   python -m src.evaluate --all            # every experiment in eval/experiments.yaml -> MLflow
   python -m src.evaluate --experiment B   # one experiment
@@ -119,9 +122,19 @@ def evaluate(
     return metrics, rows
 
 
+RETRIEVAL_OVERRIDES = ("embedding_model", "rerank_model", "rerank_candidates")
+
+
+def experiment_config(params: dict, cfg: dict) -> dict:
+    """cfg with the experiment's retrieval settings (embedding model, reranker) applied."""
+    retrieval = {**cfg["retrieval"], **{p: params[p] for p in RETRIEVAL_OVERRIDES if p in params}}
+    return {**cfg, "retrieval": retrieval}
+
+
 def run_experiment(name: str, params: dict, cfg: dict, use_llm: bool) -> tuple[dict, list[dict]]:
     from src.index import embed, load_embedder
 
+    cfg = experiment_config(params, cfg)
     model = load_embedder(cfg["retrieval"]["embedding_model"])
     chunks = build_chunks(params["size_words"], params["overlap_words"])
     vectors = embed(model, [c["text"] for c in chunks])
@@ -149,11 +162,13 @@ def log_to_mlflow(name: str, params: dict, cfg: dict, metrics: dict, rows_path: 
 
     mlflow.set_tracking_uri(os.environ.get("MLFLOW_TRACKING_URI", f"sqlite:///{ROOT}/mlflow.db"))
     mlflow.set_experiment("filings-qa-retrieval")
+    retrieval = experiment_config(params, cfg)["retrieval"]
     with mlflow.start_run(run_name=name):
         mlflow.log_params(
             {
                 **params,
-                "embedding_model": cfg["retrieval"]["embedding_model"],
+                "embedding_model": retrieval["embedding_model"],
+                "rerank_model": retrieval.get("rerank_model") or "none",
                 "llm_model": cfg["llm"]["model"],
             }
         )

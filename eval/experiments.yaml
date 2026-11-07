@@ -1,6 +1,9 @@
 # Retrieval experiments: change ONE thing at a time.
 # A vs B: chunk size (all-MiniLM-L6-v2 reads only ~256 word pieces, about 190 words, per chunk).
 # B vs C: how many chunks are retrieved.
+# C vs D: re-ranking the top 20 with a cross-encoder before keeping 8.
+# C vs E: a stronger embedding model that reads up to 512 word pieces (about 380 words).
+# F: both.
 experiments:
   A_chunk200_k5:
     size_words: 200
@@ -14,3 +17,21 @@ experiments:
     size_words: 400
     overlap_words: 50
     top_k: 8
+  D_rerank:
+    size_words: 400
+    overlap_words: 50
+    top_k: 8
+    rerank_model: cross-encoder/ms-marco-MiniLM-L-6-v2
+    rerank_candidates: 20
+  E_bge_small:
+    size_words: 400
+    overlap_words: 50
+    top_k: 8
+    embedding_model: BAAI/bge-small-en-v1.5
+  F_bge_small_rerank:
+    size_words: 400
+    overlap_words: 50
+    top_k: 8
+    embedding_model: BAAI/bge-small-en-v1.5
+    rerank_model: cross-encoder/ms-marco-MiniLM-L-6-v2
+    rerank_candidates: 20
