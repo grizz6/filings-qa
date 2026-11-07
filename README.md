@@ -47,6 +47,26 @@ can be checked in seconds. When the filing does not cover a question, the app re
 **Companies covered:** Apple, Microsoft, Tesla, JPMorgan Chase, Walmart, Pfizer,
 Exxon Mobil, Nike, Netflix and Delta Air Lines.
 
+## How it works
+
+```mermaid
+flowchart LR
+    subgraph Offline["Indexing (GitHub Actions)"]
+        A[SEC EDGAR 10-K] --> B[Item 1A. Risk Factors]
+        B --> C[400-word chunks]
+        C --> D[Embeddings]
+        D --> E[(Supabase Postgres<br/>pgvector)]
+    end
+    subgraph Online["Answering a question"]
+        Q[Question] --> F[Detect the company]
+        F --> G[Vector search<br/>in that filing]
+        E --> G
+        G --> H[Top 8 passages]
+        H --> I[Gemini: answer only<br/>from the passages]
+        I --> J[Answer with numbered<br/>citations, or<br/>Not found in the filings.]
+    end
+```
+
 ## Results
 
 Measured on 50 questions: 40 with a known answer, each checked word-for-word against the
@@ -57,6 +77,9 @@ filing, and 10 that the filings do not answer.
 | A | 200 words | 5 | 75% | 0.52 | 10/10 |
 | B | 400 words | 5 | 82.5% | 0.60 | 10/10 |
 | **Live app** | **400 words** | **8** | **90%** | **0.61** | **10/10** |
+
+The live app answers in a median of about 5.5 seconds per question, from search to the
+cited answer (over the last 30 days of its question log).
 
 ## Repository structure
 
