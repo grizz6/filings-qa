@@ -4,6 +4,7 @@ from src import retrieve
 from src.config import load_config
 
 CFG = load_config()
+VECTOR_ONLY = {**CFG, "retrieval": {**CFG["retrieval"], "rerank_model": None}}
 
 
 @pytest.mark.parametrize(
@@ -36,7 +37,7 @@ def test_retrieve_passes_company_filter_and_top_k():
         seen.update(question=question, index_name=index_name, tickers=tickers, k=k)
         return [("TSLA_1A_0003", "TSLA", "Supply text", "https://sec/x", 0.71)]
 
-    chunks = retrieve.retrieve("Tesla supply chain?", cfg=CFG, search_fn=fake_search)
+    chunks = retrieve.retrieve("Tesla supply chain?", cfg=VECTOR_ONLY, search_fn=fake_search)
     assert seen == {
         "question": "Tesla supply chain?",
         "index_name": "main",

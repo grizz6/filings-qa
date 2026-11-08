@@ -7,6 +7,7 @@ from src import evaluate
 from src.config import load_config
 
 CFG = load_config()
+CFG = {**CFG, "retrieval": {**CFG["retrieval"], "rerank_model": None}}  # vector search only
 
 SUPPLY = "Battery cell supply could be disrupted by suppliers."
 RATES = "Rising interest rates may reduce consumer spending."

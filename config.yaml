@@ -33,8 +33,9 @@ retrieval:
   top_k: 8  # k=8 found the quote for 36/40 test questions vs 33/40 at k=5
   embedding_model: sentence-transformers/all-MiniLM-L6-v2
   # Cross-encoder that re-orders the vector search results (src/rerank.py); empty = off.
-  # It re-scores `rerank_candidates` chunks and keeps the best top_k.
-  rerank_model:
+  # It re-scores `rerank_candidates` chunks and keeps the best top_k. Experiment D: MRR
+  # 0.571 -> 0.758 and right passage found 36/40 -> 37/40 (eval/experiments.yaml).
+  rerank_model: cross-encoder/ms-marco-MiniLM-L-6-v2
   rerank_candidates: 20
 
 llm:

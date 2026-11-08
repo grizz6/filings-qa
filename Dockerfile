@@ -15,12 +15,15 @@ COPY app/requirements.txt ./requirements.txt
 RUN pip install -r requirements.txt "uvicorn>=0.30"
 
 USER user
-# Bake the embedding model into the image so the first question does not download it.
+# Bake the embedding and rerank models into the image so the first question does not
+# download them.
 COPY --chown=user config.yaml ./
 COPY --chown=user src/__init__.py src/config.py ./src/
-RUN python -c "from sentence_transformers import SentenceTransformer; \
+RUN python -c "from sentence_transformers import CrossEncoder, SentenceTransformer; \
 from src.config import load_config; \
-SentenceTransformer(load_config()['retrieval']['embedding_model'])"
+r = load_config()['retrieval']; \
+SentenceTransformer(r['embedding_model']); \
+r.get('rerank_model') and CrossEncoder(r['rerank_model'])"
 
 COPY --chown=user .streamlit ./.streamlit
 COPY --chown=user src ./src

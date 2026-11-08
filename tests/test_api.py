@@ -142,11 +142,15 @@ def test_stats_summarizes_the_log(log):
 def test_real_answer_pipeline_is_wired_end_to_end(monkeypatch):
     # create_app() without answer_fn uses the real answer() -> retrieve() -> chat() chain;
     # only the vector search and the Gemini HTTP call are faked.
-    from src import index, llm
+    from src import index, llm, rerank
     from src.config import load_config
 
     cfg = load_config()
     searched = {}
+
+    class FakeReranker:
+        def predict(self, pairs):
+            return [1.0] * len(pairs)
 
     def fake_query(text, index_name, tickers, k):
         searched.update(index_name=index_name, tickers=tickers, k=k)
@@ -161,13 +165,16 @@ def test_real_answer_pipeline_is_wired_end_to_end(monkeypatch):
             return {"candidates": [{"content": {"parts": [{"text": "Supplier risk [1]."}]}}]}
 
     monkeypatch.setattr(index, "query", fake_query)
+    monkeypatch.setattr(rerank, "load_reranker", lambda name: FakeReranker())
     monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     monkeypatch.setattr(llm.requests, "post", lambda *a, **k: GeminiReply())
     c = TestClient(api.create_app(log=monitor.MemoryLog(), cfg=cfg))
     body = c.post("/ask", json={"question": "What does Tesla say about suppliers?"}).json()
     assert body["answer"] == "Supplier risk [1]."
     assert body["citations"][0]["id"] == "TSLA_1A_0002"
-    assert searched == {"index_name": "main", "tickers": ["TSLA"], "k": cfg["retrieval"]["top_k"]}
+    # Re-ranking is on in config.yaml: the search returns the candidates the reranker re-scores.
+    k = cfg["retrieval"]["rerank_candidates"]
+    assert searched == {"index_name": "main", "tickers": ["TSLA"], "k": k}
 
 
 def test_without_database_the_log_falls_back_to_memory(monkeypatch):

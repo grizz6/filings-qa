@@ -267,15 +267,17 @@ def test_answer_text_cannot_render_images_or_links():
 def test_warmup_loads_the_model_once_in_the_background(monkeypatch):
     # Streamlit Cloud wakes the app on the first visit; loading the model then made the
     # first question slow. The warm-up starts loading as soon as the app starts.
-    from src import index
+    from src import index, rerank
 
     loaded = []
     monkeypatch.setattr(client, "API_URL", "")
     monkeypatch.setattr(index, "load_embedder", lambda name: loaded.append(name))
+    monkeypatch.setattr(rerank, "load_reranker", lambda name: loaded.append(name))
     client._warmup_thread.cache_clear()
     client.start_warmup().join(timeout=5)
     client.start_warmup().join(timeout=5)
-    assert loaded == ["sentence-transformers/all-MiniLM-L6-v2"]
+    retrieval = client.load_config()["retrieval"]
+    assert loaded == [retrieval["embedding_model"], retrieval["rerank_model"]]
     client._warmup_thread.cache_clear()
 
 

@@ -64,19 +64,21 @@ def _build_local_api(secrets_present: tuple[bool, ...]):
     return TestClient(create_app(), raise_server_exceptions=False)
 
 
-def _load_model_quietly(name: str) -> None:
-    from src import index
+def _load_models_quietly(retrieval: dict) -> None:
+    from src import index, rerank
 
     try:
-        index.load_embedder(name)
-    except Exception as exc:  # the first question will load it (and report errors) instead
+        index.load_embedder(retrieval["embedding_model"])
+        if retrieval.get("rerank_model"):
+            rerank.load_reranker(retrieval["rerank_model"])
+    except Exception as exc:  # the first question will load them (and report errors) instead
         print(f"WARNING: model warm-up failed: {exc}", file=sys.stderr)
 
 
 @lru_cache(maxsize=1)
 def _warmup_thread() -> threading.Thread:
-    name = load_config()["retrieval"]["embedding_model"]
-    thread = threading.Thread(target=_load_model_quietly, args=(name,), daemon=True)
+    retrieval = load_config()["retrieval"]
+    thread = threading.Thread(target=_load_models_quietly, args=(retrieval,), daemon=True)
     thread.start()
     return thread
 

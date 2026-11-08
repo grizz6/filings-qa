@@ -11,7 +11,7 @@ EXAMPLES = [
 ]
 
 st.set_page_config(page_title="Filings Q&A", page_icon="📄", layout="centered")
-start_warmup()  # load the search model while the visitor reads the page
+start_warmup()  # load the search models while the visitor reads the page
 cfg = load_config()
 
 st.title("Filings Q&A")
