@@ -11,12 +11,12 @@ exact passages of their SEC filings.**
 
 - **Data pipeline:** SEC EDGAR 10-K filings → *Item 1A. Risk Factors* → 400-word chunks →
   `all-MiniLM-L6-v2` embeddings → Supabase Postgres with pgvector
-- **Question answering:** company-aware vector search (top 8 passages) → Google Gemini
-  writes an answer that cites every passage it uses
+- **Question answering:** company-aware vector search (top 20 passages) → cross-encoder
+  re-ranking keeps the best 8 → Google Gemini writes an answer that cites every passage it uses
 - **Web app:** Streamlit (Ask and Monitoring pages) and a FastAPI service, packaged with
   Docker and hosted on Streamlit Community Cloud
-- **Quality:** a verified 50-question benchmark, experiments tracked in MLflow, and an
-  evaluation gate on every change
+- **Quality:** a verified 50-question benchmark that scores both retrieval and the final
+  answers, experiments tracked in MLflow, and an evaluation gate on every change
 - **Operations:** GitHub Actions for testing, deployment, daily live checks and
   monitoring; secrets held in encrypted stores and protected by secret scanning and
   row-level security
@@ -61,7 +61,8 @@ flowchart LR
         Q[Question] --> F[Detect the company]
         F --> G[Vector search<br/>in that filing]
         E --> G
-        G --> H[Top 8 passages]
+        G --> R[Top 20 passages]
+        R --> H[Cross-encoder<br/>keeps the best 8]
         H --> I[Gemini: answer only<br/>from the passages]
         I --> J[Answer with numbered<br/>citations, or<br/>Not found in the filings.]
     end
@@ -69,17 +70,27 @@ flowchart LR
 
 ## Results
 
-Measured on 50 questions: 40 with a known answer, each checked word-for-word against the
-filing, and 10 that the filings do not answer.
+Measured on 50 questions against the filings of November 2026: 40 with a known answer, each
+checked word-for-word against the filing, and 10 that the filings do not answer. A to C
+change one setting at a time; the last two rows each change one setting from C.
 
-| Setup | Chunk size | Passages retrieved | Right passage found | Ranking (MRR) | Correctly declined |
-|---|---|---|---|---|---|
-| A | 200 words | 5 | 75% | 0.52 | 10/10 |
-| B | 400 words | 5 | 82.5% | 0.60 | 10/10 |
-| **Live app** | **400 words** | **8** | **90%** | **0.61** | **10/10** |
+| Setup | Chunk size | Passages | Re-ranked | Right passage found | Ranking (MRR) | Answer cites it | Correctly declined |
+|---|---|---|---|---|---|---|---|
+| A | 200 words | 5 | No | 72.5% | 0.52 | 72.5% | 10/10 |
+| B | 400 words | 5 | No | 80% | 0.56 | 80% | 10/10 |
+| C | 400 words | 8 | No | 90% | 0.57 | 90% | 10/10 |
+| C with `bge-small` embeddings | 400 words | 8 | No | 85% | 0.67 | 85% | 10/10 |
+| **Live app** | **400 words** | **8** | **Top 20 → 8** | **92.5%** | **0.76** | **92.5%** | **10/10** |
+
+- **Right passage found:** a retrieved passage contains the quote that answers the question.
+- **Answer cites it:** the final answer cites a passage that contains that quote, so the
+  answer rests on the text that holds the fact.
+- Larger chunks and more passages lifted the right-passage rate from 72.5% to 90%. Re-ranking
+  with a cross-encoder then moved the right passage higher (MRR 0.57 → 0.76) and found one
+  more. A stronger embedding model on its own did worse.
 
 The live app answers in a median of about 5.5 seconds per question, from search to the
-cited answer (over the last 30 days of its question log).
+cited answer (over the last 30 days of its question log, before re-ranking was added).
 
 ## Repository structure
 
