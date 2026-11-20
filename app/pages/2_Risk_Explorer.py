@@ -117,10 +117,21 @@ with left:
     by_topic = view[view["topic"] == topic].sort_values("score", ascending=False)
     bars = (
         alt.Chart(by_topic)
-        .mark_bar(color=series_color(), cornerRadiusEnd=4, height=16)
+        .mark_bar(color=series_color(), cornerRadiusEnd=4)
         .encode(
-            x=alt.X("score:Q", title="similarity", scale=alt.Scale(domain=[0, 1])),
-            y=alt.Y("company:N", sort=None, title=None, axis=alt.Axis(labelLimit=220)),
+            x=alt.X(
+                "score:Q",
+                title="similarity",
+                scale=alt.Scale(domain=[0, 1]),
+                axis=alt.Axis(tickCount=5, format=".1f"),
+            ),
+            y=alt.Y(
+                "company:N",
+                sort=None,
+                title=None,
+                scale=alt.Scale(paddingInner=0.35),
+                axis=alt.Axis(labelLimit=220, labelOverlap=False),
+            ),
             tooltip=["company", alt.Tooltip("score:Q", title="similarity", format=".2f")],
         )
         .properties(height=28 * len(by_topic) + 30)

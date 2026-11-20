@@ -361,3 +361,58 @@ def test_risk_explorer_reports_an_unavailable_map(api, fresh_cache):
     api["/risk-map"] = (503, {"detail": "The risk map is unavailable right now. Try again."})
     at = page("pages/2_Risk_Explorer.py")
     assert "unavailable" in at.warning[0].value
+
+
+def compare_page():
+    at = page("pages/3_Compare.py")
+    assert at.title[0].value == "Compare companies"
+    return at
+
+
+def press(at, label):
+    next(b for b in at.button if b.label == label).click()
+    at.run()
+    assert not at.exception, at.exception
+    return at
+
+
+def test_compare_asks_each_company_its_own_filing(api):
+    api["/ask"] = (200, ANSWER)
+    at = compare_page()
+    assert not at.sidebar.multiselect  # this page picks companies itself
+    at.text_input[0].input("How do they describe supply chain risk?")
+    press(at, "Compare")
+    asked = [kw["json"] for m, p, kw in api["_seen"] if p == "/ask"]
+    assert [a["settings"]["companies"] for a in asked] == [["TSLA"], ["NKE"]]
+    assert {a["question"] for a in asked} == {"How do they describe supply chain risk?"}
+    text = " ".join(m.value for m in at.markdown)
+    assert "#### Tesla (TSLA)" in text and "#### Nike (NKE)" in text
+    assert text.count("Component shortages could delay production [1].") == 2
+
+
+def test_compare_example_fills_question_and_companies(api):
+    at = compare_page()
+    press(at, "How could cybersecurity incidents affect them?")
+    assert at.text_input[0].value == "How could cybersecurity incidents affect them?"
+    assert at.multiselect[0].value == ["JPM", "MSFT", "NFLX"]
+
+
+def test_compare_shows_refusals_and_errors_per_company(api):
+    api["/ask"] = (200, {**ANSWER, "refused": True, "answer": "Not found in the filings."})
+    at = compare_page()
+    at.text_input[0].input("What is their revenue?")
+    press(at, "Compare")
+    assert sum("Not found in this filing" in i.value for i in at.info) == 2
+    api["/ask"] = (429, {"detail": "The demo's daily limit of questions is reached."})
+    press(at, "Compare")
+    assert sum("daily limit" in w.value for w in at.warning) == 2
+
+
+def test_compare_needs_a_question_and_two_companies(api):
+    at = compare_page()
+    press(at, "Compare")
+    assert "Write a question first." in at.warning[0].value
+    at.text_input[0].input("Supply risk?")
+    at.multiselect[0].set_value(["TSLA"])
+    press(at, "Compare")
+    assert "at least 2 companies" in at.warning[0].value

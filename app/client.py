@@ -129,8 +129,11 @@ def setting_defaults(cfg: dict) -> dict:
     }
 
 
-def search_settings_sidebar(cfg: dict) -> dict:
+def search_settings_sidebar(cfg: dict, choose_companies: bool = True) -> dict:
     """Sidebar controls for the search settings; returns them for POST /ask.
+
+    choose_companies=False leaves out the company picker (pages that pick companies
+    themselves); the returned companies are then None.
 
     Streamlit drops a widget's value when a page without that widget runs, so each value is
     also kept under its own key and restored, and the choices follow the visitor across pages.
@@ -155,16 +158,17 @@ def search_settings_sidebar(cfg: dict) -> dict:
     can_rerank = defaults["rerank"]
     with st.sidebar:
         st.header("Search settings")
-        st.multiselect(
-            "Companies to search",
-            list(names),
-            format_func=lambda t: f"{names[t]} ({t})",
-            key="setting_companies",
-            on_change=keep,
-            args=("companies",),
-            placeholder="The ones named in the question",
-            help="Leave empty to search the companies your question names (or all of them).",
-        )
+        if choose_companies:
+            st.multiselect(
+                "Companies to search",
+                list(names),
+                format_func=lambda t: f"{names[t]} ({t})",
+                key="setting_companies",
+                on_change=keep,
+                args=("companies",),
+                placeholder="The ones named in the question",
+                help="Leave empty to search the companies your question names (or all of them).",
+            )
         st.slider(
             "Passages to use",
             1,
@@ -194,7 +198,7 @@ def search_settings_sidebar(cfg: dict) -> dict:
         st.button("Reset to defaults", on_click=reset)
 
     chosen = {name: st.session_state[f"keep_{name}"] for name in defaults}
-    return {**chosen, "companies": chosen["companies"] or None}
+    return {**chosen, "companies": (choose_companies and chosen["companies"]) or None}
 
 
 def safe_markdown(text: str) -> str:
