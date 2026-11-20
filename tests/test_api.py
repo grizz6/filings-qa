@@ -73,6 +73,7 @@ def test_ask_returns_answer_with_citations_and_short_sources(log):
     src = body["sources"][0]
     assert src["id"] == "TSLA_1A_0002" and src["score"] == 0.62
     assert len(src["snippet"]) <= api.SNIPPET_CHARS + 1  # trimmed, with an ellipsis
+    assert src["text"] == CHUNK["text"]  # the full passage, for highlighting on the page
     assert isinstance(body["latency_ms"], int)
 
 

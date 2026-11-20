@@ -201,6 +201,48 @@ def search_settings_sidebar(cfg: dict, choose_companies: bool = True) -> dict:
     return {**chosen, "companies": (choose_companies and chosen["companies"]) or None}
 
 
+MARKDOWN_SPECIAL = "\\`*_[]<>#|$~"
+
+
+def escape_markdown(text: str) -> str:
+    """Filing text shown as-is: no accidental bold, links, headings or LaTeX ($)."""
+    return "".join("\\" + ch if ch in MARKDOWN_SPECIAL else ch for ch in text)
+
+
+def highlighted_passage(text: str, sentence: str | None) -> str:
+    """Passage as escaped Markdown, with the supporting sentence (if any) highlighted."""
+    text = " ".join(text.split())
+    if not sentence or sentence not in text:
+        return escape_markdown(text)
+    before, after = text.split(sentence, 1)
+    marked = f":blue-background[{escape_markdown(sentence)}]"
+    return escape_markdown(before) + marked + escape_markdown(after)
+
+
+def answer_markdown(question: str, result: dict, settings: dict, model: str) -> str:
+    """A self-contained Markdown record of an answer and its sources, for download."""
+    lines = [f"# {question}", ""]
+    if result["refused"]:
+        lines.append("Not found in the filings.")
+    else:
+        lines += [result["answer"], "", "## Sources", ""]
+        for c in result["citations"]:
+            lines.append(
+                f"[{c['n']}] {c['ticker']} 10-K, Item 1A, passage {c['id']}: {c['source_url']}"
+            )
+    companies = ", ".join(settings.get("companies") or []) or "named in the question"
+    lines += [
+        "",
+        "---",
+        f"Filings Q&A · model {model} · companies: {companies} · passages: "
+        f"{settings.get('passages')} · re-ranked: {'yes' if settings.get('rerank') else 'no'} · "
+        f"answer length: {settings.get('detail')}",
+        "Answers come only from the Risk Factors sections of the companies' latest 10-K "
+        "filings. Not investment advice.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def safe_markdown(text: str) -> str:
     """Model output as plain text with [n] citations: no images, outside links or HTML."""
     text = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", text)  # images
@@ -230,7 +272,10 @@ SEQUENTIAL = ["#cde2fb", "#86b6ef", "#3987e5", "#1c5cab", "#0d366b"]
 __all__ = [
     "SEQUENTIAL",
     "ApiError",
+    "answer_markdown",
     "call",
+    "escape_markdown",
+    "highlighted_passage",
     "load_config",
     "safe_markdown",
     "search_settings_sidebar",

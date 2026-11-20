@@ -2,6 +2,7 @@
 
   GET  /health   settings and whether the secrets are configured (never their values)
   POST /ask      {"question": "...", "settings": {...}} -> answer, citations, sources, latency
+                 (each source: id, ticker, score, link, snippet and the full passage text)
                  (settings, all optional: companies, passages, rerank, detail; src/settings.py)
   GET  /risk-map  risk topics x companies: best passage and similarity per cell (no LLM)
   POST /risk-map  same, with extra topics {"topics": {"name": "description"}}
@@ -160,6 +161,10 @@ def create_app(answer_fn=None, log=None, cfg: dict | None = None, best_fn=None) 
                     "score": round(c["score"], 4),
                     "source_url": c["source_url"],
                     "snippet": _snippet(c["text"]),
+                    "text": c["text"],
+                    **(
+                        {"rerank_score": round(c["rerank_score"], 4)} if "rerank_score" in c else {}
+                    ),
                 }
                 for c in result["chunks"]
             ],  # fmt: skip

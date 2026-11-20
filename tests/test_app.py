@@ -19,7 +19,12 @@ ANSWER = {
     "refused": False,
     "citations": [{"n": 1, "id": "TSLA_1A_0002", "ticker": "TSLA", "source_url": "https://sec/t"}],
     "sources": [{"id": "TSLA_1A_0002", "ticker": "TSLA", "score": 0.61,
-                 "source_url": "https://sec/t", "snippet": "Tesla depends on suppliers…"}],
+                 "source_url": "https://sec/t", "snippet": "Tesla depends on suppliers…",
+                 "text": "Tesla depends on suppliers. Component shortages could delay "
+                         "production of our vehicles. Costs may rise.",
+                 "rerank_score": 4.2},
+                {"id": "TSLA_1A_0007", "ticker": "TSLA", "score": 0.44,
+                 "source_url": "https://sec/t", "snippet": "Other…", "text": "Other risks."}],
     "latency_ms": 2300,
 }  # fmt: skip
 STATS = {
@@ -112,7 +117,7 @@ def test_ask_shows_cited_answer_and_sources(api):
     text = " ".join(m.value for m in at.markdown)
     assert "Component shortages could delay production [1]." in text
     assert "[open the 10-K](https://sec/t)" in text
-    assert "Retrieved excerpts (1)" in at.expander[0].label
+    assert any(e.label == "Retrieved excerpts (2)" for e in at.expander)
     assert any("2.3 s" in c.value for c in at.caption)
     method, path, kwargs = api["_seen"][-1]
     assert (method, path) == ("POST", "/ask")
@@ -416,3 +421,37 @@ def test_compare_needs_a_question_and_two_companies(api):
     at.multiselect[0].set_value(["TSLA"])
     press(at, "Compare")
     assert "at least 2 companies" in at.warning[0].value
+
+
+def test_answer_view_highlights_support_charts_passages_and_offers_a_download(api):
+    api["/ask"] = (200, ANSWER)
+    at = ask(page("Ask.py"), "What does Tesla say about supply chain risk?")
+    cited = next(e for e in at.expander if e.label == "[1] TSLA · TSLA_1A_0002")
+    text = " ".join(m.value for m in cited.markdown)
+    assert ":blue-background[Component shortages could delay production of our vehicles.]" in text
+    assert len(at.get("vega_lite_chart")) == 1  # passage relevance chart
+    assert at.get("download_button")[0].proto.label == "Download answer (Markdown)"
+
+
+def test_answer_stays_on_screen_after_other_interactions(api):
+    api["/ask"] = (200, ANSWER)
+    at = ask(page("Ask.py"), "What does Tesla say about supply chain risk?")
+    at.sidebar.radio[0].set_value("detailed")
+    at.run()
+    assert any("Component shortages" in m.value for m in at.markdown)
+
+
+def test_answer_markdown_records_answer_sources_and_settings():
+    md = client.answer_markdown(
+        "Q?", ANSWER, {"companies": ["TSLA"], "passages": 8, "rerank": True,
+                       "detail": "short"}, "m"
+    )  # fmt: skip
+    assert md.startswith("# Q?\n")
+    assert "Component shortages could delay production [1]." in md
+    assert "[1] TSLA 10-K, Item 1A, passage TSLA_1A_0002: https://sec/t" in md
+    assert "companies: TSLA · passages: 8 · re-ranked: yes" in md
+
+
+def test_filing_text_cannot_turn_into_markdown_or_latex():
+    out = client.highlighted_passage("Costs of $5 *million* [see] # note", "Costs of $5")
+    assert out == ":blue-background[Costs of \\$5] \\*million\\* \\[see\\] \\# note"
