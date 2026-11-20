@@ -217,7 +217,14 @@ def series_color() -> str:
     return "#2a78d6"
 
 
+# Sequential blue ramp (light -> dark) for magnitudes such as the risk map's scores; the
+# low end recedes toward the page. .streamlit/config.toml sets a custom theme, which Streamlit
+# draws light whatever the visitor's system setting, so the ramp is fixed for light.
+SEQUENTIAL = ["#cde2fb", "#86b6ef", "#3987e5", "#1c5cab", "#0d366b"]
+
+
 __all__ = [
+    "SEQUENTIAL",
     "ApiError",
     "call",
     "load_config",

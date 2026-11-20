@@ -138,7 +138,7 @@ def test_ask_shows_api_errors_as_warning(api):
 
 def test_monitoring_page_shows_kpis_charts_and_recent_questions(api):
     api["/stats"] = (200, STATS)
-    at = page("pages/1_Monitoring.py")
+    at = page("pages/4_Monitoring.py")
     metrics = {m.label: m.value for m in at.metric}
     assert metrics == {
         "Questions": "3",
@@ -156,14 +156,14 @@ def test_monitoring_page_with_no_questions_yet(api):
              "low_confidence_rate": None, "latency_p50_ms": None, "latency_p95_ms": None,
              "recent": []}  # fmt: skip
     api["/stats"] = (200, {**STATS, **empty})
-    at = page("pages/1_Monitoring.py")
+    at = page("pages/4_Monitoring.py")
     assert "No questions in this period yet" in at.info[0].value
     assert {m.label: m.value for m in at.metric}["Refusal rate"] == "–"
 
 
 def test_monitoring_page_when_api_is_down(api):
     api["/stats"] = requests.ConnectionError("refused")
-    at = page("pages/1_Monitoring.py")
+    at = page("pages/4_Monitoring.py")
     assert "not reachable" in at.warning[0].value
 
 
@@ -310,3 +310,54 @@ def test_sidebar_reset_restores_the_defaults(api):
     next(b for b in at.sidebar.button if b.label == "Reset to defaults").click()
     at.run()
     assert at.sidebar.slider[0].value == client.load_config()["retrieval"]["top_k"]
+
+
+RISK_MAP = {
+    "topics": ["Cybersecurity", "Climate"],
+    "descriptions": {"Cybersecurity": "cyber attacks", "Climate": "climate change"},
+    "companies": {"TSLA": "Tesla", "NKE": "Nike"},
+    "cells": [
+        {"topic": t, "ticker": k, "score": s, "chunk_id": f"{k}_1A_0001",
+         "snippet": f"{k} passage on {t}", "source_url": f"https://sec/{k}"}
+        for t, k, s in [("Cybersecurity", "TSLA", 0.62), ("Cybersecurity", "NKE", 0.48),
+                        ("Climate", "TSLA", 0.55), ("Climate", "NKE", 0.41)]
+    ],
+}  # fmt: skip
+
+
+@pytest.fixture
+def fresh_cache():
+    import streamlit as st
+
+    st.cache_data.clear()  # the page caches the map; tests must not see each other's
+    yield
+    st.cache_data.clear()
+
+
+def test_risk_explorer_draws_the_map_and_drills_into_a_cell(api, fresh_cache):
+    api["/risk-map"] = (200, RISK_MAP)
+    at = page("pages/2_Risk_Explorer.py")
+    assert at.title[0].value == "Risk Explorer"
+    assert at.multiselect[0].value == ["Cybersecurity", "Climate"]
+    assert at.selectbox[1].value == "Tesla (TSLA)"  # strongest company for the topic first
+    assert any("TSLA passage on Cybersecurity" in c.value for c in at.caption)
+    assert any("[Open the 10-K](https://sec/TSLA)" in m.value for m in at.markdown)
+
+
+def test_risk_explorer_adds_a_custom_topic(api, fresh_cache):
+    api["/risk-map"] = (200, RISK_MAP)
+    at = page("pages/2_Risk_Explorer.py")
+    at.text_input[0].input("Water")
+    at.text_input[1].input("water scarcity and drought")
+    next(b for b in at.button if b.label == "Add topic").click()
+    at.run()
+    assert not at.exception, at.exception
+    method, path, kwargs = api["_seen"][-1]
+    assert (method, path) == ("POST", "/risk-map")
+    assert kwargs["json"] == {"topics": {"Water": "water scarcity and drought"}}
+
+
+def test_risk_explorer_reports_an_unavailable_map(api, fresh_cache):
+    api["/risk-map"] = (503, {"detail": "The risk map is unavailable right now. Try again."})
+    at = page("pages/2_Risk_Explorer.py")
+    assert "unavailable" in at.warning[0].value

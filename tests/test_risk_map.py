@@ -18,6 +18,7 @@ def test_build_gives_one_cell_per_topic_and_configured_company():
     out = risk_map.build({"Cyber": "cyber attacks", "Climate": "climate"}, CFG, fake_best)
     assert out["topics"] == ["Cyber", "Climate"]
     assert out["companies"] == CFG["companies"]
+    assert out["descriptions"] == {"Cyber": "cyber attacks", "Climate": "climate"}
     assert len(out["cells"]) == 4  # the unconfigured company is dropped
     cell = out["cells"][0]
     assert cell == {**cell, "topic": "Cyber", "ticker": "NKE", "score": 0.4,

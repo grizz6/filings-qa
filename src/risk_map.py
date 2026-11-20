@@ -26,7 +26,7 @@ def _snippet(text: str) -> str:
 
 
 def build(topics: dict[str, str], cfg: dict, best_fn) -> dict:
-    """{topics, companies, cells}: one cell per topic and company with its best passage.
+    """{topics, descriptions, companies, cells}: one cell per topic and company.
 
     best_fn(texts) returns, for each text, rows of (id, ticker, text, source_url, score).
     """
@@ -48,7 +48,7 @@ def build(topics: dict[str, str], cfg: dict, best_fn) -> dict:
                     "source_url": source_url,
                 }
             )
-    return {"topics": names, "companies": companies, "cells": cells}
+    return {"topics": names, "descriptions": topics, "companies": companies, "cells": cells}
 
 
 def cached_build(topics: dict[str, str], cfg: dict, best_fn, now=time.time) -> dict:
