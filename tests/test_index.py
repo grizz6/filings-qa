@@ -146,3 +146,29 @@ def test_embedder_loads_once_even_when_requested_concurrently(monkeypatch):
         t.join()
     assert built == ["m"]
     index.load_embedder.cache_clear()
+
+
+def test_best_per_company_runs_one_query_per_text_on_one_connection(monkeypatch):
+    calls, closed = [], []
+
+    class Cur(FakeCursor):
+        def fetchall(self):
+            return [("TSLA_1A_0000", "TSLA", "t", "u", 0.9)]
+
+    class Conn(FakeConn):
+        def cursor(self):
+            return Cur(calls)
+
+        def close(self):
+            closed.append(True)
+
+    monkeypatch.setattr(index, "load_embedder", lambda name: "model")
+    vectors = lambda model, texts: [[float(i)] for i, _ in enumerate(texts)]  # noqa: E731
+    monkeypatch.setattr(index, "embed", vectors)
+    monkeypatch.setattr(index, "db_url", lambda: "postgresql://x")
+    monkeypatch.setattr(index, "connect", lambda url: Conn())
+    out = index.best_per_company(["cyber", "climate"])
+    assert len(out) == 2 and out[0][0][1] == "TSLA"
+    assert [params for _, _, params in calls] == [([0.0], "main", [0.0]), ([1.0], "main", [1.0])]
+    assert "DISTINCT ON (ticker)" in calls[0][1]
+    assert closed == [True]

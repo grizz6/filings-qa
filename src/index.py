@@ -66,6 +66,14 @@ SEARCH_SQL = """SELECT id, ticker, text, source_url, 1 - (embedding <=> %s) AS s
     LIMIT %s"""
 
 
+# Each company's single best chunk for a query vector (the Risk Explorer's heatmap cells).
+BEST_PER_COMPANY_SQL = """SELECT DISTINCT ON (ticker)
+        id, ticker, text, source_url, 1 - (embedding <=> %s) AS score
+    FROM chunks
+    WHERE index_name = %s
+    ORDER BY ticker, embedding <=> %s"""
+
+
 def load_chunks(path: Path = CHUNKS_PATH) -> list[dict]:
     with open(path, encoding="utf-8") as f:
         return [json.loads(line) for line in f if line.strip()]
@@ -180,6 +188,22 @@ def query(text: str, index_name: str, tickers: list[str] | None, k: int) -> list
     conn = connect(db_url())
     try:
         return search(conn, embed(model, [text])[0], index_name, tickers, k)
+    finally:
+        conn.close()
+
+
+def best_per_company(texts: list[str], index_name: str = "main") -> list[list[tuple]]:
+    """For each text, every company's best-matching chunk (one connection, one query each)."""
+    model = load_embedder(load_config()["retrieval"]["embedding_model"])
+    vectors = embed(model, texts)
+    conn = connect(db_url())
+    try:
+        with conn.cursor() as cur:
+            results = []
+            for v in vectors:
+                cur.execute(BEST_PER_COMPANY_SQL, (v, index_name, v))
+                results.append(cur.fetchall())
+            return results
     finally:
         conn.close()
 

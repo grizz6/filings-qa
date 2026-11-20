@@ -25,6 +25,21 @@ aliases:
 cik_overrides:
   XOM: 34088
 
+# Risk Explorer (src/risk_map.py): topic -> description searched in every company's filing.
+risk_topics:
+  Cybersecurity: cybersecurity attacks, data breaches and information security incidents
+  Supply chain: supply chain disruptions, supplier dependence and component shortages
+  Regulation: changes in laws, government regulation and regulatory investigations
+  Litigation: lawsuits, legal proceedings and litigation costs
+  Climate: climate change, extreme weather and environmental regulation
+  Competition: intense competition and pressure on prices and market share
+  Economy: economic downturns, inflation, recession and reduced consumer spending
+  Interest rates: changes in interest rates and the cost of borrowing
+  International: international operations, trade, tariffs and geopolitical tensions
+  Talent: attracting and retaining key employees and talented personnel
+  Technology & AI: artificial intelligence, new technology and the risk of falling behind
+  Reputation: damage to brand and reputation from negative publicity
+
 chunking:
   size_words: 400
   overlap_words: 50

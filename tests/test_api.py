@@ -8,6 +8,7 @@ from src.llm import LLMError
 
 CFG = {
     "companies": {"TSLA": "Tesla", "NKE": "Nike"},
+    "risk_topics": {"Cyber": "cyber attacks"},
     "llm": {"model": "test-model"},
     "retrieval": {"top_k": 8},
     "app": {"max_questions_per_day": 3, "max_question_chars": 100, "low_confidence_score": 0.4},
@@ -233,3 +234,34 @@ def test_ask_rejects_unknown_companies_and_bad_settings(log):
     r = c.post("/ask", json={"question": "Supply risk?", "settings": {"passages": 50}})
     assert r.status_code == 422
     assert log.rows == []  # rejected before any work or logging
+
+
+def fake_best(texts):
+    return [[("TSLA_1A_0002", "TSLA", "Tesla text", "https://sec/t", 0.5)] for _ in texts]
+
+
+def test_risk_map_uses_config_topics_and_extra_ones(log):
+    from src import risk_map
+
+    risk_map._cache.clear()
+    c = TestClient(api.create_app(answer_fn=fake_answer, log=log, cfg=CFG, best_fn=fake_best))
+    assert c.get("/risk-map").json()["topics"] == ["Cyber"]
+    body = c.post("/risk-map", json={"topics": {" Water ": "water scarcity"}}).json()
+    assert body["topics"] == ["Cyber", "Water"]
+    assert {cell["topic"] for cell in body["cells"]} == {"Cyber", "Water"}
+    assert log.rows == []  # no question is asked, so nothing is logged
+    risk_map._cache.clear()
+
+
+def test_risk_map_rejects_bad_topics_and_hides_failures(log):
+    from src import risk_map
+
+    def broken(texts):
+        raise RuntimeError("password=hunter2")
+
+    risk_map._cache.clear()
+    c = TestClient(api.create_app(answer_fn=fake_answer, log=log, cfg=CFG, best_fn=broken))
+    assert c.post("/risk-map", json={"topics": {"X": "ab"}}).status_code == 422
+    assert c.post("/risk-map", json={"topics": {"X": "y" * 201}}).status_code == 422
+    r = c.get("/risk-map")
+    assert r.status_code == 503 and "hunter2" not in r.text

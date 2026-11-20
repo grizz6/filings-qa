@@ -3,6 +3,8 @@
   GET  /health   settings and whether the secrets are configured (never their values)
   POST /ask      {"question": "...", "settings": {...}} -> answer, citations, sources, latency
                  (settings, all optional: companies, passages, rerank, detail; src/settings.py)
+  GET  /risk-map  risk topics x companies: best passage and similarity per cell (no LLM)
+  POST /risk-map  same, with extra topics {"topics": {"name": "description"}}
   GET  /stats    monitoring summary of the question log (?days=14)
 
 Every question is logged (src/monitor.py). A daily cap protects the free Gemini quota.
@@ -20,13 +22,19 @@ from datetime import UTC, datetime, timedelta
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from src import monitor
+from src import monitor, risk_map
 from src import settings as search_settings
 from src.config import load_config
 from src.llm import LLMError
 
 SNIPPET_CHARS = 300
 STATS_MAX_DAYS = 90
+
+
+class RiskMapRequest(BaseModel):
+    """Extra topics for the risk map, name -> description, on top of config.yaml's."""
+
+    topics: dict[str, str] = Field(default_factory=dict, max_length=risk_map.MAX_TOPICS)
 
 
 class AskRequest(BaseModel):
@@ -49,7 +57,7 @@ def _default_log():
         return monitor.MemoryLog()
 
 
-def create_app(answer_fn=None, log=None, cfg: dict | None = None) -> FastAPI:
+def create_app(answer_fn=None, log=None, cfg: dict | None = None, best_fn=None) -> FastAPI:
     cfg = cfg or load_config()
     app_cfg = cfg["app"]
     if answer_fn is None:
@@ -157,6 +165,34 @@ def create_app(answer_fn=None, log=None, cfg: dict | None = None) -> FastAPI:
             ],  # fmt: skip
             "latency_ms": latency_ms,
         }
+
+    def topic_map(extra: dict[str, str]):
+        nonlocal best_fn
+        for name, text in extra.items():
+            if not name.strip() or not 3 <= len(text.strip()) <= risk_map.MAX_TOPIC_CHARS:
+                raise HTTPException(
+                    422,
+                    f"Each topic needs a name and a description of 3 to "
+                    f"{risk_map.MAX_TOPIC_CHARS} characters.",
+                )
+        if best_fn is None:
+            from src.index import best_per_company  # needs sentence-transformers + psycopg
+
+            best_fn = best_per_company
+        topics = {**cfg.get("risk_topics", {}), **{k.strip(): v.strip() for k, v in extra.items()}}
+        try:
+            return risk_map.cached_build(topics, cfg, best_fn)
+        except Exception as exc:
+            print(f"WARNING: risk map failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+            raise HTTPException(503, "The risk map is unavailable right now. Try again.") from None
+
+    @app.get("/risk-map")
+    def get_risk_map():
+        return topic_map({})
+
+    @app.post("/risk-map")
+    def post_risk_map(req: RiskMapRequest):
+        return topic_map(req.topics)
 
     @app.get("/stats")
     def stats(days: int = Query(14, ge=1, le=STATS_MAX_DAYS)):
