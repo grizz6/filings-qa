@@ -120,6 +120,83 @@ def setup_problems() -> list[str]:
     return [name for name, flag in flags.items() if not health.get(flag)]
 
 
+def setting_defaults(cfg: dict) -> dict:
+    return {
+        "companies": [],
+        "passages": cfg["retrieval"]["top_k"],
+        "rerank": bool(cfg["retrieval"].get("rerank_model")),
+        "detail": "short",
+    }
+
+
+def search_settings_sidebar(cfg: dict) -> dict:
+    """Sidebar controls for the search settings; returns them for POST /ask.
+
+    Streamlit drops a widget's value when a page without that widget runs, so each value is
+    also kept under its own key and restored, and the choices follow the visitor across pages.
+    """
+    import streamlit as st
+
+    from src.settings import MAX_PASSAGES
+
+    defaults = setting_defaults(cfg)
+    for name, value in defaults.items():
+        st.session_state.setdefault(f"keep_{name}", value)
+        st.session_state[f"setting_{name}"] = st.session_state[f"keep_{name}"]
+
+    def keep(name):
+        st.session_state[f"keep_{name}"] = st.session_state[f"setting_{name}"]
+
+    def reset():
+        for name, value in defaults.items():
+            st.session_state[f"keep_{name}"] = st.session_state[f"setting_{name}"] = value
+
+    names = cfg["companies"]
+    can_rerank = defaults["rerank"]
+    with st.sidebar:
+        st.header("Search settings")
+        st.multiselect(
+            "Companies to search",
+            list(names),
+            format_func=lambda t: f"{names[t]} ({t})",
+            key="setting_companies",
+            on_change=keep,
+            args=("companies",),
+            placeholder="The ones named in the question",
+            help="Leave empty to search the companies your question names (or all of them).",
+        )
+        st.slider(
+            "Passages to use",
+            1,
+            MAX_PASSAGES,
+            key="setting_passages",
+            on_change=keep,
+            args=("passages",),
+            help="More passages can find more, but give the model more text to read.",
+        )
+        st.toggle(
+            "Re-rank passages",
+            key="setting_rerank",
+            on_change=keep,
+            args=("rerank",),
+            disabled=not can_rerank,
+            help="A cross-encoder re-orders the search results so the most relevant come first.",
+        )
+        st.radio(
+            "Answer length",
+            ["short", "detailed"],
+            format_func=str.capitalize,
+            key="setting_detail",
+            on_change=keep,
+            args=("detail",),
+            horizontal=True,
+        )
+        st.button("Reset to defaults", on_click=reset)
+
+    chosen = {name: st.session_state[f"keep_{name}"] for name in defaults}
+    return {**chosen, "companies": chosen["companies"] or None}
+
+
 def safe_markdown(text: str) -> str:
     """Model output as plain text with [n] citations: no images, outside links or HTML."""
     text = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", text)  # images
@@ -145,6 +222,7 @@ __all__ = [
     "call",
     "load_config",
     "safe_markdown",
+    "search_settings_sidebar",
     "secrets_to_env",
     "series_color",
     "setup_problems",

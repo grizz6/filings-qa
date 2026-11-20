@@ -116,7 +116,11 @@ def test_ask_shows_cited_answer_and_sources(api):
     assert any("2.3 s" in c.value for c in at.caption)
     method, path, kwargs = api["_seen"][-1]
     assert (method, path) == ("POST", "/ask")
-    assert kwargs["json"] == {"question": "What does Tesla say about supply chain risk?"}
+    assert kwargs["json"] == {
+        "question": "What does Tesla say about supply chain risk?",
+        "settings": {"companies": None, "passages": client.load_config()["retrieval"]["top_k"],
+                     "rerank": True, "detail": "short"},
+    }  # fmt: skip
 
 
 def test_ask_shows_refusal_as_info(api):
@@ -284,3 +288,25 @@ def test_warmup_loads_the_model_once_in_the_background(monkeypatch):
 def test_no_warmup_when_a_separate_api_serves_requests(monkeypatch):
     monkeypatch.setattr(client, "API_URL", "http://api.test")
     assert client.start_warmup() is None
+
+
+def test_sidebar_settings_are_sent_with_the_question(api):
+    api["/ask"] = (200, ANSWER)
+    at = page("Ask.py")
+    at.sidebar.multiselect[0].select("NKE")
+    at.sidebar.slider[0].set_value(4)
+    at.sidebar.toggle[0].set_value(False)
+    at.sidebar.radio[0].set_value("detailed")
+    at.run()
+    ask(at, "How are tariffs described?")
+    sent = api["_seen"][-1][2]["json"]["settings"]
+    assert sent == {"companies": ["NKE"], "passages": 4, "rerank": False, "detail": "detailed"}
+
+
+def test_sidebar_reset_restores_the_defaults(api):
+    at = page("Ask.py")
+    at.sidebar.slider[0].set_value(3)
+    at.run()
+    next(b for b in at.sidebar.button if b.label == "Reset to defaults").click()
+    at.run()
+    assert at.sidebar.slider[0].value == client.load_config()["retrieval"]["top_k"]
