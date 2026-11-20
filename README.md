@@ -13,8 +13,8 @@ exact passages of their SEC filings.**
   `all-MiniLM-L6-v2` embeddings → Supabase Postgres with pgvector
 - **Question answering:** company-aware vector search (top 20 passages) → cross-encoder
   re-ranking keeps the best 8 → Google Gemini writes an answer that cites every passage it uses
-- **Web app:** Streamlit (Ask and Monitoring pages) and a FastAPI service, packaged with
-  Docker and hosted on Streamlit Community Cloud
+- **Web app:** Streamlit (Ask, Risk Explorer, Compare and Monitoring pages) and a FastAPI
+  service, packaged with Docker and hosted on Streamlit Community Cloud
 - **Quality:** a verified 50-question benchmark that scores both retrieval and the final
   answers, experiments tracked in MLflow, and an evaluation gate on every change
 - **Operations:** GitHub Actions for testing, deployment, daily live checks and
@@ -46,6 +46,19 @@ can be checked in seconds. When the filing does not cover a question, the app re
 
 **Companies covered:** Apple, Microsoft, Tesla, JPMorgan Chase, Walmart, Pfizer,
 Exxon Mobil, Nike, Netflix and Delta Air Lines.
+
+## Using the app
+
+| Page | What it does |
+|---|---|
+| **Ask** | Ask a question and get a cited answer. Each cited passage opens with the sentence that best supports the answer highlighted, a chart shows how relevant every retrieved passage was, and the answer downloads as Markdown with its sources. |
+| **Risk Explorer** | A heatmap of twelve risk topics across the ten companies, scored by how closely each filing has a passage on the topic. Add your own topics, colour by raw or relative score, rank the companies on one topic and read the passage behind any cell. No language model is called, so it is free to use. |
+| **Compare** | Ask one question about two to four companies and read their answers side by side, each drawn only from that company's 10-K. |
+| **Monitoring** | Questions per day, refusals, response times and low-confidence searches from the question log. |
+
+**Search settings** (sidebar on Ask and Compare): which companies to search, how many
+passages the answer may use, re-ranking on or off, and short or detailed answers. The same
+settings are available to API clients as the optional `settings` field of `POST /ask`.
 
 ## How it works
 
@@ -96,7 +109,7 @@ cited answer (over the last 30 days of its question log, before re-ranking was a
 
 ```
 src/        Data pipeline, retrieval, answer generation, evaluation, API and monitoring
-app/        Streamlit app: Ask page and Monitoring dashboard
+app/        Streamlit app: Ask, Risk Explorer, Compare and Monitoring pages
 eval/       Benchmark questions and experiment settings
 checks/     Automated checks of the live app
 tests/      Unit tests
