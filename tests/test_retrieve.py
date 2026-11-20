@@ -97,3 +97,15 @@ def test_no_reranking_when_no_model_is_configured():
 
     chunks = retrieve.retrieve("Tesla?", cfg=cfg, search_fn=fake_search, rerank_fn=fake_rerank)
     assert len(chunks) == cfg["retrieval"]["top_k"]
+
+
+def test_chosen_companies_replace_the_ones_in_the_question():
+    seen = {}
+
+    def fake_search(question, index_name, tickers, k):
+        seen["tickers"] = tickers
+        return []
+
+    retrieve.retrieve("What does Tesla say?", cfg=VECTOR_ONLY, search_fn=fake_search,
+                      tickers=["NKE"])  # fmt: skip
+    assert seen["tickers"] == ["NKE"]

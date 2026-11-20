@@ -1,7 +1,8 @@
 """HTTP API for the Q&A system.
 
   GET  /health   settings and whether the secrets are configured (never their values)
-  POST /ask      {"question": "..."} -> answer, citations, retrieved sources, latency
+  POST /ask      {"question": "...", "settings": {...}} -> answer, citations, sources, latency
+                 (settings, all optional: companies, passages, rerank, detail; src/settings.py)
   GET  /stats    monitoring summary of the question log (?days=14)
 
 Every question is logged (src/monitor.py). A daily cap protects the free Gemini quota.
@@ -20,6 +21,7 @@ from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from src import monitor
+from src import settings as search_settings
 from src.config import load_config
 from src.llm import LLMError
 
@@ -29,6 +31,7 @@ STATS_MAX_DAYS = 90
 
 class AskRequest(BaseModel):
     question: str = Field(min_length=3)
+    settings: search_settings.SearchSettings = Field(default_factory=search_settings.SearchSettings)
 
 
 def _snippet(text: str) -> str:
@@ -52,8 +55,14 @@ def create_app(answer_fn=None, log=None, cfg: dict | None = None) -> FastAPI:
     if answer_fn is None:
         from src.answer import answer
 
-        def answer_fn(question):
-            return answer(question, cfg)
+        def answer_fn(question, chosen=None):
+            chosen = chosen or search_settings.SearchSettings()
+            return answer(
+                question,
+                search_settings.apply(chosen, cfg),
+                tickers=chosen.companies,
+                detail=chosen.detail,
+            )
 
     log = log if log is not None else _default_log()
     app = FastAPI(title="Filings Q&A", description=__doc__.split("\n")[0])
@@ -93,6 +102,8 @@ def create_app(answer_fn=None, log=None, cfg: dict | None = None) -> FastAPI:
             raise HTTPException(
                 422, f"Questions are limited to {app_cfg['max_question_chars']} characters."
             )
+        if unknown := search_settings.unknown_companies(req.settings, cfg):
+            raise HTTPException(422, f"Unknown companies: {', '.join(unknown)}.")
         today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
         try:
             asked_today = log.count_since(today)
@@ -107,7 +118,7 @@ def create_app(answer_fn=None, log=None, cfg: dict | None = None) -> FastAPI:
         start = time.perf_counter()
         elapsed = lambda: int((time.perf_counter() - start) * 1000)  # noqa: E731
         try:
-            result = answer_fn(question)
+            result = answer_fn(question, req.settings)
         except LLMError as exc:
             record(question, "error", elapsed(), error=str(exc)[:300])
             if "quota" in str(exc).lower():

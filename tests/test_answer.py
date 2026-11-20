@@ -57,3 +57,22 @@ def test_format_result_lists_citations():
     out = answer.format_result(result)
     assert "A: Answer [1]." in out
     assert "[1] TSLA_1A_0001  https://sec/1" in out
+
+
+def test_detailed_answers_ask_for_more_sentences():
+    short = answer.build_messages("Q?", CHUNKS)[0]["content"]
+    detailed = answer.build_messages("Q?", CHUNKS, "detailed")[0]["content"]
+    assert "2 to 5 sentences" in short and "5 to 10 sentences" in detailed
+    assert short == answer.SYSTEM_PROMPT
+
+
+def test_chosen_companies_are_passed_to_retrieval():
+    seen = {}
+
+    def retrieve_fn(question, cfg, tickers=None):
+        seen["tickers"] = tickers
+        return CHUNKS
+
+    answer.answer("Q?", CFG, retrieve_fn=retrieve_fn, chat_fn=lambda m, c: "A [1].",
+                  tickers=["NKE", "WMT"])  # fmt: skip
+    assert seen["tickers"] == ["NKE", "WMT"]

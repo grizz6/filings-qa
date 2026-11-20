@@ -7,6 +7,7 @@ from src import api, monitor
 from src.llm import LLMError
 
 CFG = {
+    "companies": {"TSLA": "Tesla", "NKE": "Nike"},
     "llm": {"model": "test-model"},
     "retrieval": {"top_k": 8},
     "app": {"max_questions_per_day": 3, "max_question_chars": 100, "low_confidence_score": 0.4},
@@ -20,7 +21,7 @@ CHUNK = {
 }
 
 
-def fake_answer(question, refused=False):
+def fake_answer(question, settings=None, refused=False):
     return {
         "question": question,
         "answer": "Not found in the filings." if refused else "Supply risk [1].",
@@ -75,7 +76,7 @@ def test_ask_returns_answer_with_citations_and_short_sources(log):
 
 
 def test_ask_logs_each_question(log):
-    c = client(log, answer_fn=lambda q: fake_answer(q, refused="CEO" in q))
+    c = client(log, answer_fn=lambda q, s=None: fake_answer(q, refused="CEO" in q))
     c.post("/ask", json={"question": "What does Tesla say about supply?"})
     c.post("/ask", json={"question": "Who is the CEO of Tesla?"})
     assert [r["status"] for r in log.rows] == ["answered", "refused"]
@@ -101,7 +102,7 @@ def test_daily_cap_returns_429(log):
 
 
 def test_llm_error_returns_503_and_is_logged(log):
-    def broken(q):
+    def broken(q, settings=None):
         raise LLMError("Gemini daily free-tier quota is used up for this model")
 
     r = client(log, answer_fn=broken).post("/ask", json={"question": "Tesla supply risk?"})
@@ -111,7 +112,7 @@ def test_llm_error_returns_503_and_is_logged(log):
 
 
 def test_unexpected_error_hides_details(log):
-    def broken(q):
+    def broken(q, settings=None):
         raise RuntimeError("password=hunter2 in connection string")
 
     r = client(log, answer_fn=broken).post("/ask", json={"question": "Tesla supply risk?"})
@@ -130,7 +131,7 @@ def test_logging_failure_does_not_break_answers():
 
 
 def test_stats_summarizes_the_log(log):
-    c = client(log, answer_fn=lambda q: fake_answer(q, refused="CEO" in q))
+    c = client(log, answer_fn=lambda q, s=None: fake_answer(q, refused="CEO" in q))
     c.post("/ask", json={"question": "What does Tesla say about supply?"})
     c.post("/ask", json={"question": "Who is the CEO of Tesla?"})
     body = c.get("/stats", params={"days": 7}).json()
@@ -195,7 +196,7 @@ def test_unreadable_log_does_not_block_questions():
 
 
 def test_llm_outage_that_is_not_quota_returns_503_try_again(log):
-    def overloaded(q):
+    def overloaded(q, settings=None):
         raise LLMError("Gemini returned 503: high demand")
 
     r = client(log, answer_fn=overloaded).post("/ask", json={"question": "Tesla supply risk?"})
@@ -209,3 +210,26 @@ def test_module_level_app_is_built_lazily(monkeypatch):
     assert TestClient(api.app).get("/health").status_code == 200
     with pytest.raises(AttributeError):
         api.not_a_thing  # noqa: B018
+
+
+def test_ask_passes_the_chosen_settings_to_the_answer(log):
+    seen = {}
+
+    def answer_fn(question, chosen):
+        seen["settings"] = chosen
+        return fake_answer(question)
+
+    body = {"question": "How are supply risks described?",
+            "settings": {"companies": ["TSLA"], "passages": 4, "rerank": False,
+                         "detail": "detailed"}}  # fmt: skip
+    assert client(log, answer_fn=answer_fn).post("/ask", json=body).status_code == 200
+    assert seen["settings"].model_dump() == body["settings"]
+
+
+def test_ask_rejects_unknown_companies_and_bad_settings(log):
+    c = client(log)
+    r = c.post("/ask", json={"question": "Supply risk?", "settings": {"companies": ["ZZZ"]}})
+    assert r.status_code == 422 and "ZZZ" in r.json()["detail"]
+    r = c.post("/ask", json={"question": "Supply risk?", "settings": {"passages": 50}})
+    assert r.status_code == 422
+    assert log.rows == []  # rejected before any work or logging

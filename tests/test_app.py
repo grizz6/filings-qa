@@ -169,7 +169,7 @@ def test_without_api_url_the_api_runs_in_this_process(monkeypatch):
 
     from src import api, monitor
 
-    def fake_answer(q):
+    def fake_answer(q, settings=None):
         return {"question": q, "answer": "Risk [1].", "refused": False,
                 "citations": [{"n": 1, "id": "TSLA_1A_0002", "source_url": "https://sec/t"}],
                 "chunks": [{"id": "TSLA_1A_0002", "ticker": "TSLA", "text": "t",

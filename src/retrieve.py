@@ -46,15 +46,17 @@ def retrieve(
     cfg: dict | None = None,
     search_fn=None,
     rerank_fn=None,
+    tickers: list[str] | None = None,
 ) -> list[dict]:
     """Top-k chunks for the question as dicts: id, ticker, text, source_url, score.
 
     With `retrieval.rerank_model` set, vector search returns `rerank_candidates` chunks and a
-    cross-encoder keeps the best k of them (src/rerank.py).
+    cross-encoder keeps the best k of them (src/rerank.py). `tickers` searches only those
+    companies' filings instead of the ones the question names.
     """
     cfg = cfg or load_config()
     k = k or cfg["retrieval"]["top_k"]
-    tickers = detect_companies(question, cfg) or None
+    tickers = tickers or detect_companies(question, cfg) or None
     if search_fn is None:
         from src.index import query  # needs sentence-transformers + psycopg
 

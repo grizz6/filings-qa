@@ -17,22 +17,34 @@ from src.retrieve import retrieve
 
 NOT_FOUND = "Not found in the filings."
 
-SYSTEM_PROMPT = f"""You answer questions about the "Risk Factors" sections of companies' \
+LENGTH_RULES = {
+    "short": "Keep the answer short: 2 to 5 sentences.",
+    "detailed": "Give a detailed answer: 5 to 10 sentences, grouping related risks together.",
+}
+
+
+def system_prompt(detail: str = "short") -> str:
+    return f"""You answer questions about the "Risk Factors" sections of companies' \
 annual reports (Form 10-K).
 
 Rules:
 - Use ONLY the numbered excerpts provided. Do not use outside knowledge.
 - Cite every claim with the excerpt number in square brackets, like [2] or [1][3].
-- Keep the answer short: 2 to 5 sentences.
+- {LENGTH_RULES[detail]}
 - If the excerpts do not contain the answer, reply with exactly: {NOT_FOUND}"""
 
 
-def build_messages(question: str, chunks: list[dict]) -> list[dict[str, str]]:
+SYSTEM_PROMPT = system_prompt()
+
+
+def build_messages(
+    question: str, chunks: list[dict], detail: str = "short"
+) -> list[dict[str, str]]:
     excerpts = "\n\n".join(
         f"[{i}] ({c['ticker']}, {c['id']})\n{c['text']}" for i, c in enumerate(chunks, 1)
     )
     return [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt(detail)},
         {"role": "user", "content": f"Excerpts:\n\n{excerpts}\n\nQuestion: {question}"},
     ]
 
@@ -53,13 +65,21 @@ def extract_citations(text: str, chunks: list[dict]) -> list[dict]:
     ]
 
 
-def answer(question: str, cfg: dict | None = None, retrieve_fn=retrieve, chat_fn=chat) -> dict:
+def answer(
+    question: str,
+    cfg: dict | None = None,
+    retrieve_fn=retrieve,
+    chat_fn=chat,
+    tickers: list[str] | None = None,
+    detail: str = "short",
+) -> dict:
+    """Retrieve, then answer with citations. `tickers` searches only those filings."""
     cfg = cfg or load_config()
-    chunks = retrieve_fn(question, cfg=cfg)
+    chunks = retrieve_fn(question, cfg=cfg, **({"tickers": tickers} if tickers else {}))
     if not chunks:
         return {"question": question, "answer": NOT_FOUND, "refused": True, "citations": [],
                 "chunks": []}  # fmt: skip
-    text = chat_fn(build_messages(question, chunks), cfg["llm"])
+    text = chat_fn(build_messages(question, chunks, detail), cfg["llm"])
     refused = is_refusal(text)
     return {
         "question": question,
